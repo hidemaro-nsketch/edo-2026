@@ -51,6 +51,8 @@ uniform float uPatternSeed;
 uniform float uTime;
 
 #define NUM_SEEDS 22
+#define ANIM_FADE 0.15
+#define ANIM_PEAK 0.01
 
 float hash11(float p) {
   p = fract(p * 0.1031);
@@ -71,21 +73,31 @@ vec3 hsv2rgb(vec3 c) {
   return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
+// Signed circular distance: negative = sweep approaching, positive = sweep passed
+float signedCircDist(float sweep, float phase) {
+  float d = sweep - phase;
+  return d - floor(d + 0.5);
+}
+
+// Animation phase for a cell/seed
+float animPhase(float cellId) {
+  return hash11(cellId * 3.17 + uLayerIndex * 5.3 + uPatternSeed * 2.7);
+}
+
 void main() {
   vec2 uv = vUv;
   float nearest = 1e9;
   float id = 0.0;
 
-  float sweep = fract(uTime * 0.12);
+  float sweep = fract(uTime * 0.06);
 
   for (int i = 0; i < NUM_SEEDS; i++) {
     float fi = float(i);
 
-    // Deform only at the appearing edge (hidden -> visible)
-    float seedPhase = hash11(fi * 3.17 + uLayerIndex * 5.3 + uPatternSeed * 2.7);
-    float sd = sweep - seedPhase;
-    sd = sd - floor(sd + 0.5);
-    float transition = smoothstep(-0.18, -0.10, sd) * smoothstep(0.0, -0.06, sd);
+    // Deform at appearing edge: peak in the middle of the fade-in zone
+    float sd = signedCircDist(sweep, animPhase(fi));
+    float transition = smoothstep(-ANIM_FADE, -ANIM_FADE * 0.5, sd)
+                     * smoothstep(-ANIM_PEAK, -ANIM_FADE * 0.35, sd);
 
     vec2 perturbDir = vec2(hash11(fi * 7.3 + 1.1) - 0.5, hash11(fi * 11.7 + 2.3) - 0.5);
     vec2 point = 0.06 + 0.88 * hash21(fi + 19.73) + perturbDir * transition * 0.045;
@@ -109,11 +121,9 @@ void main() {
   float vignette = smoothstep(0.85, 0.15, nearest);
   fill *= mix(0.7, 1.05, vignette);
 
-  // Sequential show/hide animation
-  float cellPhase = hash11(id * 3.17 + uLayerIndex * 5.3 + uPatternSeed * 2.7);
-  float cellDist = abs(sweep - cellPhase);
-  cellDist = min(cellDist, 1.0 - cellDist);
-  float animVisibility = smoothstep(0.18, 0.02, cellDist);
+  // Visibility: symmetric fade using same window as deformation
+  float sd = signedCircDist(sweep, animPhase(id));
+  float animVisibility = smoothstep(ANIM_FADE, ANIM_PEAK, abs(sd));
 
   vec3 color = fill;
   float alpha = visibleCell * animVisibility;
