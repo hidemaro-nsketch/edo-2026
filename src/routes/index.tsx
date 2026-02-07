@@ -100,7 +100,7 @@ void main() {
                      * smoothstep(-ANIM_PEAK, -ANIM_FADE * 0.35, sd);
 
     vec2 perturbDir = vec2(hash11(fi * 7.3 + 1.1) - 0.5, hash11(fi * 11.7 + 2.3) - 0.5);
-    vec2 point = 0.06 + 0.88 * hash21(fi + 19.73) + perturbDir * transition * 0.045;
+    vec2 point = 0.06 + 0.88 * hash21(fi + 19.73) + perturbDir * transition * 0.25;
 
     float d = distance(uv, point);
 
