@@ -19,11 +19,11 @@ type DepthVoronoiPlaneProps = LayerConfig & {
 };
 
 const layers: LayerConfig[] = [
-	{ z: 0, baseHue: 0.0, hueJitter: 0.08 }, // red
-	{ z: -1.4, baseHue: 0.08, hueJitter: 0.08 }, // orange
-	{ z: -2.8, baseHue: 0.33, hueJitter: 0.08 }, // green
-	{ z: -4.2, baseHue: 0.53, hueJitter: 0.08 }, // cyan
-	{ z: -5.6, baseHue: 0.63, hueJitter: 0.08 }, // blue
+	{ z: 0, baseHue: 0.55, hueJitter: 0.06 },
+	{ z: -1.4, baseHue: 0.58, hueJitter: 0.06 },
+	{ z: -2.8, baseHue: 0.61, hueJitter: 0.06 },
+	{ z: -4.2, baseHue: 0.64, hueJitter: 0.06 },
+	{ z: -5.6, baseHue: 0.67, hueJitter: 0.06 },
 ];
 
 const layerVisibilityThreshold = 0.5;
@@ -48,6 +48,7 @@ uniform float uVisibilityThreshold;
 uniform float uLayerIndex;
 uniform float uLayerCount;
 uniform float uPatternSeed;
+uniform float uTime;
 
 #define NUM_SEEDS 22
 
@@ -97,9 +98,15 @@ void main() {
   float vignette = smoothstep(0.85, 0.15, nearest);
   fill *= mix(0.7, 1.05, vignette);
 
+  // Sequential show/hide animation
+  float cellPhase = hash11(id * 3.17 + uLayerIndex * 5.3 + uPatternSeed * 2.7);
+  float sweep = fract(uTime * 0.12);
+  float dist = abs(sweep - cellPhase);
+  dist = min(dist, 1.0 - dist);
+  float animVisibility = smoothstep(0.35, 0.05, dist);
+
   vec3 color = fill;
-  // Keep only per-cell holes.
-  float alpha = visibleCell;
+  float alpha = visibleCell * animVisibility;
 
   if (alpha < 0.02) {
     discard;
@@ -122,11 +129,26 @@ function DepthVoronoiPlane({
 	const viewPosition = useMemo(() => new Vector3(), []);
 	const baseViewPosition = useMemo(() => new Vector3(), []);
 
-	useFrame(({ camera }) => {
+	const uniforms = useMemo(
+		() => ({
+			uBaseHue: { value: baseHue },
+			uHueJitter: { value: hueJitter },
+			uVisibilityThreshold: { value: layerVisibilityThreshold },
+			uLayerIndex: { value: layerIndex },
+			uLayerCount: { value: layerCount },
+			uPatternSeed: { value: patternSeed },
+			uTime: { value: 0 },
+		}),
+		[baseHue, hueJitter, layerCount, layerIndex, patternSeed],
+	);
+
+	useFrame(({ camera, clock }) => {
 		const mesh = meshRef.current;
 		if (!mesh) {
 			return;
 		}
+
+		uniforms.uTime.value = clock.getElapsedTime();
 
 		mesh.getWorldPosition(worldPosition);
 		viewPosition.copy(worldPosition).applyMatrix4(camera.matrixWorldInverse);
@@ -138,18 +160,6 @@ function DepthVoronoiPlane({
 
 		mesh.scale.set(perspectiveCompensation, perspectiveCompensation, 1);
 	});
-
-	const uniforms = useMemo(
-		() => ({
-			uBaseHue: { value: baseHue },
-			uHueJitter: { value: hueJitter },
-			uVisibilityThreshold: { value: layerVisibilityThreshold },
-			uLayerIndex: { value: layerIndex },
-			uLayerCount: { value: layerCount },
-			uPatternSeed: { value: patternSeed },
-		}),
-		[baseHue, hueJitter, layerCount, layerIndex, patternSeed],
-	);
 
 	return (
 		<mesh ref={meshRef} position={[0, 0, z]}>
