@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DoubleSide, type Mesh, Vector3 } from "three";
 import { OrbitControls as ThreeOrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
@@ -8,22 +8,25 @@ export const Route = createFileRoute("/")({ component: App });
 
 type LayerConfig = {
 	z: number;
-	hueShift: number;
-	hiddenThreshold: number;
+	baseHue: number;
+	hueJitter: number;
 };
 
 type DepthVoronoiPlaneProps = LayerConfig & {
 	layerIndex: number;
 	layerCount: number;
+	patternSeed: number;
 };
 
 const layers: LayerConfig[] = [
-	{ z: 0, hueShift: 0.03, hiddenThreshold: 0.36 },
-	{ z: -1.4, hueShift: 0.17, hiddenThreshold: 0.42 },
-	{ z: -2.8, hueShift: 0.33, hiddenThreshold: 0.49 },
-	{ z: -4.2, hueShift: 0.52, hiddenThreshold: 0.56 },
-	{ z: -5.6, hueShift: 0.71, hiddenThreshold: 0.62 },
+	{ z: 0, baseHue: 0.0, hueJitter: 0.08 }, // red
+	{ z: -1.4, baseHue: 0.08, hueJitter: 0.08 }, // orange
+	{ z: -2.8, baseHue: 0.33, hueJitter: 0.08 }, // green
+	{ z: -4.2, baseHue: 0.53, hueJitter: 0.08 }, // cyan
+	{ z: -5.6, baseHue: 0.63, hueJitter: 0.08 }, // blue
 ];
+
+const layerVisibilityThreshold = 0.5;
 
 const vertexShader = `
 varying vec2 vUv;
@@ -39,10 +42,12 @@ precision mediump float;
 
 varying vec2 vUv;
 
-uniform float uHueShift;
-uniform float uHiddenThreshold;
+uniform float uBaseHue;
+uniform float uHueJitter;
+uniform float uVisibilityThreshold;
 uniform float uLayerIndex;
 uniform float uLayerCount;
+uniform float uPatternSeed;
 
 #define NUM_SEEDS 22
 
@@ -81,12 +86,13 @@ void main() {
     }
   }
 
-  float guaranteedLayer = floor(hash11(id * 11.17 + 0.73) * uLayerCount);
+  float guaranteedLayer = floor(hash11(id * 11.17 + 0.73 + uPatternSeed * 3.1) * uLayerCount);
   float isGuaranteedLayer = 1.0 - step(0.5, abs(uLayerIndex - guaranteedLayer));
-  float randomVisible = step(uHiddenThreshold, hash11(id * 7.13 + uLayerIndex * 17.0 + 3.1));
+  float randomVisible = step(uVisibilityThreshold, hash11(id * 7.13 + uLayerIndex * 17.0 + 3.1 + uPatternSeed * 9.7));
   float visibleCell = max(isGuaranteedLayer, randomVisible);
 
-  float hue = fract(hash11(id * 5.37 + 2.11 + uHueShift * 10.0) + uHueShift);
+  float hueOffset = (hash11(id * 5.37 + 2.11) - 0.5) * uHueJitter;
+  float hue = fract(uBaseHue + hueOffset);
   vec3 fill = hsv2rgb(vec3(hue, 0.7, 0.95));
   float vignette = smoothstep(0.85, 0.15, nearest);
   fill *= mix(0.7, 1.05, vignette);
@@ -105,10 +111,11 @@ void main() {
 
 function DepthVoronoiPlane({
 	z,
-	hueShift,
-	hiddenThreshold,
+	baseHue,
+	hueJitter,
 	layerIndex,
 	layerCount,
+	patternSeed,
 }: DepthVoronoiPlaneProps) {
 	const meshRef = useRef<Mesh>(null);
 	const worldPosition = useMemo(() => new Vector3(), []);
@@ -134,12 +141,14 @@ function DepthVoronoiPlane({
 
 	const uniforms = useMemo(
 		() => ({
-			uHueShift: { value: hueShift },
-			uHiddenThreshold: { value: hiddenThreshold },
+			uBaseHue: { value: baseHue },
+			uHueJitter: { value: hueJitter },
+			uVisibilityThreshold: { value: layerVisibilityThreshold },
 			uLayerIndex: { value: layerIndex },
 			uLayerCount: { value: layerCount },
+			uPatternSeed: { value: patternSeed },
 		}),
-		[hiddenThreshold, hueShift, layerCount, layerIndex],
+		[baseHue, hueJitter, layerCount, layerIndex, patternSeed],
 	);
 
 	return (
@@ -158,6 +167,8 @@ function DepthVoronoiPlane({
 }
 
 function Scene() {
+	const [patternSeed] = useState(() => Math.random() * 1000);
+
 	return (
 		<>
 			<color attach="background" args={["#020617"]} />
@@ -166,10 +177,11 @@ function Scene() {
 				<DepthVoronoiPlane
 					key={`${index}-${layer.z}`}
 					z={layer.z}
-					hueShift={layer.hueShift}
-					hiddenThreshold={layer.hiddenThreshold}
+					baseHue={layer.baseHue}
+					hueJitter={layer.hueJitter}
 					layerIndex={index}
 					layerCount={layers.length}
+					patternSeed={patternSeed}
 				/>
 			))}
 		</>
