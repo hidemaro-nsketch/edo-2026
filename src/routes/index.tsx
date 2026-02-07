@@ -76,9 +76,20 @@ void main() {
   float nearest = 1e9;
   float id = 0.0;
 
+  float sweep = fract(uTime * 0.12);
+
   for (int i = 0; i < NUM_SEEDS; i++) {
     float fi = float(i);
-    vec2 point = 0.06 + 0.88 * hash21(fi + 19.73);
+
+    // Deform only at the appearing edge (hidden -> visible)
+    float seedPhase = hash11(fi * 3.17 + uLayerIndex * 5.3 + uPatternSeed * 2.7);
+    float sd = sweep - seedPhase;
+    sd = sd - floor(sd + 0.5);
+    float transition = smoothstep(-0.18, -0.10, sd) * smoothstep(0.0, -0.06, sd);
+
+    vec2 perturbDir = vec2(hash11(fi * 7.3 + 1.1) - 0.5, hash11(fi * 11.7 + 2.3) - 0.5);
+    vec2 point = 0.06 + 0.88 * hash21(fi + 19.73) + perturbDir * transition * 0.045;
+
     float d = distance(uv, point);
 
     if (d < nearest) {
@@ -100,10 +111,9 @@ void main() {
 
   // Sequential show/hide animation
   float cellPhase = hash11(id * 3.17 + uLayerIndex * 5.3 + uPatternSeed * 2.7);
-  float sweep = fract(uTime * 0.12);
-  float dist = abs(sweep - cellPhase);
-  dist = min(dist, 1.0 - dist);
-  float animVisibility = smoothstep(0.35, 0.05, dist);
+  float cellDist = abs(sweep - cellPhase);
+  cellDist = min(cellDist, 1.0 - cellDist);
+  float animVisibility = smoothstep(0.18, 0.02, cellDist);
 
   vec3 color = fill;
   float alpha = visibleCell * animVisibility;
