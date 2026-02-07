@@ -1,7 +1,8 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { DoubleSide } from "three";
+import { OrbitControls as ThreeOrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -10,15 +11,14 @@ type LayerConfig = {
 	seed: number;
 	hueShift: number;
 	hiddenThreshold: number;
-	opacity: number;
 };
 
 const layers: LayerConfig[] = [
-	{ z: 0, seed: 0.7, hueShift: 0.03, hiddenThreshold: 0.36, opacity: 0.88 },
-	{ z: -0.9, seed: 1.9, hueShift: 0.17, hiddenThreshold: 0.42, opacity: 0.78 },
-	{ z: -1.8, seed: 3.1, hueShift: 0.33, hiddenThreshold: 0.49, opacity: 0.72 },
-	{ z: -2.7, seed: 4.3, hueShift: 0.52, hiddenThreshold: 0.56, opacity: 0.66 },
-	{ z: -3.6, seed: 5.4, hueShift: 0.71, hiddenThreshold: 0.62, opacity: 0.62 },
+	{ z: 0, seed: 0.7, hueShift: 0.03, hiddenThreshold: 0.36 },
+	{ z: -0.9, seed: 1.9, hueShift: 0.17, hiddenThreshold: 0.42 },
+	{ z: -1.8, seed: 3.1, hueShift: 0.33, hiddenThreshold: 0.49 },
+	{ z: -2.7, seed: 4.3, hueShift: 0.52, hiddenThreshold: 0.56 },
+	{ z: -3.6, seed: 5.4, hueShift: 0.71, hiddenThreshold: 0.62 },
 ];
 
 const vertexShader = `
@@ -38,7 +38,6 @@ varying vec2 vUv;
 uniform float uSeed;
 uniform float uHueShift;
 uniform float uHiddenThreshold;
-uniform float uOpacity;
 
 #define NUM_SEEDS 22
 
@@ -81,8 +80,6 @@ void main() {
     }
   }
 
-  float edgeDistance = secondNearest - nearest;
-  float cellMask = smoothstep(0.01, 0.03, edgeDistance);
   float visibleCell = step(uHiddenThreshold, hash11(id * 7.13 + floor(uSeed * 13.0)));
 
   float hue = fract(hash11(id * 5.37 + 2.11 + uHueShift * 10.0) + uHueShift);
@@ -90,9 +87,9 @@ void main() {
   float vignette = smoothstep(0.85, 0.15, nearest);
   fill *= mix(0.7, 1.05, vignette);
 
-  vec3 line = vec3(0.03, 0.05, 0.1);
-  vec3 color = mix(line, fill, cellMask);
-  float alpha = visibleCell * cellMask * uOpacity;
+  vec3 color = fill;
+  // Keep only per-cell holes.
+  float alpha = visibleCell;
 
   if (alpha < 0.02) {
     discard;
@@ -107,16 +104,14 @@ function DepthVoronoiPlane({
 	seed,
 	hueShift,
 	hiddenThreshold,
-	opacity,
 }: LayerConfig) {
 	const uniforms = useMemo(
 		() => ({
 			uSeed: { value: seed },
 			uHueShift: { value: hueShift },
 			uHiddenThreshold: { value: hiddenThreshold },
-			uOpacity: { value: opacity },
 		}),
-		[hiddenThreshold, hueShift, opacity, seed],
+		[hiddenThreshold, hueShift, seed],
 	);
 
 	return (
@@ -138,6 +133,7 @@ function Scene() {
 	return (
 		<>
 			<color attach="background" args={["#020617"]} />
+			<CameraControls />
 			{layers.map((layer) => (
 				<DepthVoronoiPlane
 					key={`${layer.seed}-${layer.z}`}
@@ -145,11 +141,33 @@ function Scene() {
 					seed={layer.seed}
 					hueShift={layer.hueShift}
 					hiddenThreshold={layer.hiddenThreshold}
-					opacity={layer.opacity}
 				/>
 			))}
 		</>
 	);
+}
+
+function CameraControls() {
+	const { camera, gl } = useThree();
+	const controls = useMemo(
+		() => new ThreeOrbitControls(camera, gl.domElement),
+		[camera, gl.domElement],
+	);
+
+	useEffect(() => {
+		controls.enableDamping = true;
+		controls.dampingFactor = 0.08;
+		controls.enablePan = false;
+		controls.minDistance = 4.2;
+		controls.maxDistance = 9.2;
+		return () => controls.dispose();
+	}, [controls]);
+
+	useFrame(() => {
+		controls.update();
+	});
+
+	return null;
 }
 
 function App() {
