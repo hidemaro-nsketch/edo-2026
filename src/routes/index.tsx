@@ -1,24 +1,28 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
-import { DoubleSide } from "three";
+import { useEffect, useMemo, useRef } from "react";
+import { DoubleSide, type Mesh, Vector3 } from "three";
 import { OrbitControls as ThreeOrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export const Route = createFileRoute("/")({ component: App });
 
 type LayerConfig = {
 	z: number;
-	seed: number;
 	hueShift: number;
 	hiddenThreshold: number;
 };
 
+type DepthVoronoiPlaneProps = LayerConfig & {
+	layerIndex: number;
+	layerCount: number;
+};
+
 const layers: LayerConfig[] = [
-	{ z: 0, seed: 0.7, hueShift: 0.03, hiddenThreshold: 0.36 },
-	{ z: -0.9, seed: 1.9, hueShift: 0.17, hiddenThreshold: 0.42 },
-	{ z: -1.8, seed: 3.1, hueShift: 0.33, hiddenThreshold: 0.49 },
-	{ z: -2.7, seed: 4.3, hueShift: 0.52, hiddenThreshold: 0.56 },
-	{ z: -3.6, seed: 5.4, hueShift: 0.71, hiddenThreshold: 0.62 },
+	{ z: 0, hueShift: 0.03, hiddenThreshold: 0.36 },
+	{ z: -1.4, hueShift: 0.17, hiddenThreshold: 0.42 },
+	{ z: -2.8, hueShift: 0.33, hiddenThreshold: 0.49 },
+	{ z: -4.2, hueShift: 0.52, hiddenThreshold: 0.56 },
+	{ z: -5.6, hueShift: 0.71, hiddenThreshold: 0.62 },
 ];
 
 const vertexShader = `
@@ -35,9 +39,10 @@ precision mediump float;
 
 varying vec2 vUv;
 
-uniform float uSeed;
 uniform float uHueShift;
 uniform float uHiddenThreshold;
+uniform float uLayerIndex;
+uniform float uLayerCount;
 
 #define NUM_SEEDS 22
 
@@ -63,24 +68,23 @@ vec3 hsv2rgb(vec3 c) {
 void main() {
   vec2 uv = vUv;
   float nearest = 1e9;
-  float secondNearest = 1e9;
   float id = 0.0;
 
   for (int i = 0; i < NUM_SEEDS; i++) {
     float fi = float(i);
-    vec2 point = 0.06 + 0.88 * hash21(fi + uSeed * 19.73);
+    vec2 point = 0.06 + 0.88 * hash21(fi + 19.73);
     float d = distance(uv, point);
 
     if (d < nearest) {
-      secondNearest = nearest;
       nearest = d;
       id = fi;
-    } else if (d < secondNearest) {
-      secondNearest = d;
     }
   }
 
-  float visibleCell = step(uHiddenThreshold, hash11(id * 7.13 + floor(uSeed * 13.0)));
+  float guaranteedLayer = floor(hash11(id * 11.17 + 0.73) * uLayerCount);
+  float isGuaranteedLayer = 1.0 - step(0.5, abs(uLayerIndex - guaranteedLayer));
+  float randomVisible = step(uHiddenThreshold, hash11(id * 7.13 + uLayerIndex * 17.0 + 3.1));
+  float visibleCell = max(isGuaranteedLayer, randomVisible);
 
   float hue = fract(hash11(id * 5.37 + 2.11 + uHueShift * 10.0) + uHueShift);
   vec3 fill = hsv2rgb(vec3(hue, 0.7, 0.95));
@@ -101,21 +105,45 @@ void main() {
 
 function DepthVoronoiPlane({
 	z,
-	seed,
 	hueShift,
 	hiddenThreshold,
-}: LayerConfig) {
+	layerIndex,
+	layerCount,
+}: DepthVoronoiPlaneProps) {
+	const meshRef = useRef<Mesh>(null);
+	const worldPosition = useMemo(() => new Vector3(), []);
+	const viewPosition = useMemo(() => new Vector3(), []);
+	const baseViewPosition = useMemo(() => new Vector3(), []);
+
+	useFrame(({ camera }) => {
+		const mesh = meshRef.current;
+		if (!mesh) {
+			return;
+		}
+
+		mesh.getWorldPosition(worldPosition);
+		viewPosition.copy(worldPosition).applyMatrix4(camera.matrixWorldInverse);
+		baseViewPosition.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse);
+
+		const planeDepth = Math.max(0.001, -viewPosition.z);
+		const baseDepth = Math.max(0.001, -baseViewPosition.z);
+		const perspectiveCompensation = planeDepth / baseDepth;
+
+		mesh.scale.set(perspectiveCompensation, perspectiveCompensation, 1);
+	});
+
 	const uniforms = useMemo(
 		() => ({
-			uSeed: { value: seed },
 			uHueShift: { value: hueShift },
 			uHiddenThreshold: { value: hiddenThreshold },
+			uLayerIndex: { value: layerIndex },
+			uLayerCount: { value: layerCount },
 		}),
-		[hiddenThreshold, hueShift, seed],
+		[hiddenThreshold, hueShift, layerCount, layerIndex],
 	);
 
 	return (
-		<mesh position={[0, 0, z]}>
+		<mesh ref={meshRef} position={[0, 0, z]}>
 			<planeGeometry args={[8.4, 5.2]} />
 			<shaderMaterial
 				vertexShader={vertexShader}
@@ -134,13 +162,14 @@ function Scene() {
 		<>
 			<color attach="background" args={["#020617"]} />
 			<CameraControls />
-			{layers.map((layer) => (
+			{layers.map((layer, index) => (
 				<DepthVoronoiPlane
-					key={`${layer.seed}-${layer.z}`}
+					key={`${index}-${layer.z}`}
 					z={layer.z}
-					seed={layer.seed}
 					hueShift={layer.hueShift}
 					hiddenThreshold={layer.hiddenThreshold}
+					layerIndex={index}
+					layerCount={layers.length}
 				/>
 			))}
 		</>
