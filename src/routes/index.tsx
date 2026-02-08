@@ -50,9 +50,10 @@ uniform float uLayerCount;
 uniform float uPatternSeed;
 uniform float uTime;
 
-#define NUM_SEEDS 22
+#define NUM_SEEDS 150
 #define ANIM_FADE 0.15
 #define ANIM_PEAK 0.01
+#define DEFORM_STRENGTH 0.45
 
 float hash11(float p) {
   p = fract(p * 0.1031);
@@ -100,7 +101,7 @@ void main() {
                      * smoothstep(-ANIM_PEAK, -ANIM_FADE * 0.35, sd);
 
     vec2 perturbDir = vec2(hash11(fi * 7.3 + 1.1) - 0.5, hash11(fi * 11.7 + 2.3) - 0.5);
-    vec2 point = 0.06 + 0.88 * hash21(fi + 19.73) + perturbDir * transition * 0.25;
+    vec2 point = 0.06 + 0.88 * hash21(fi + 19.73) + perturbDir * transition * DEFORM_STRENGTH;
 
     float d = distance(uv, point);
 
