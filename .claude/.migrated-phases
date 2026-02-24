@@ -1,0 +1,12 @@
+{
+  "phases": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "last_migrated": "2026-02-18T04:42:53.895267+00:00",
+  "source": "/home/dev/test/claude-code-orchestra"
+}
