@@ -1,5 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
+import { useControls } from "leva";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	CustomBlending,
@@ -29,20 +30,20 @@ export const Route = createFileRoute("/")({ component: App });
 /** Visible area in world units (matches kimono background) */
 const KIMONO_SIZE = 5.2;
 
-/** Segment switching timing */
-const SWITCH_INTERVAL_MIN = 0.2; // seconds between switches (minimum)
-const SWITCH_INTERVAL_MAX = 0.5; // seconds between switches (maximum)
-const FADE_DURATION = 0.6; // seconds for cross-fade
-
-/** Background opacity (0.0 = invisible, 1.0 = full) */
-const BG_OPACITY = 1.0;
-
-/** Reset mode timing */
-const SHUFFLE_DURATION = 5.0; // seconds of shuffling before reset
-const RESET_HOLD_DURATION = 1.0; // seconds to hold reset state
-const RESET_HOP_DURATION = 0.4; // seconds per hop animation
-const RESET_HOP_COUNT = 2; // number of hops (last hop returns home)
-const RESET_STAGGER_SPREAD = 0.4; // seconds of stagger spread across all segments
+/** GUI-controlled parameters */
+type GuiParams = {
+	bgOpacity: number;
+	segmentOpacity: number;
+	animationEnabled: boolean;
+	switchIntervalMin: number;
+	switchIntervalMax: number;
+	fadeDuration: number;
+	shuffleDuration: number;
+	resetHoldDuration: number;
+	hopDuration: number;
+	hopCount: number;
+	staggerSpread: number;
+};
 
 const SAKURA_BASE_PATH = "/sakura";
 
@@ -69,7 +70,7 @@ type InstanceData = {
 	transitions: Float32Array; // vec2 [startTime, duration]
 };
 
-function buildInstanceData(segments: SegmentInfo[]): InstanceData {
+function buildInstanceData(segments: SegmentInfo[], fadeDuration = 0.6): InstanceData {
 	const count = segments.length;
 	const positions = new Float32Array(count * 2);
 	const origPositions = new Float32Array(count * 2);
@@ -126,7 +127,7 @@ function buildInstanceData(segments: SegmentInfo[]): InstanceData {
 
 		// Transition: startTime = -999 (not active), duration
 		transitions[i * 2] = -999.0;
-		transitions[i * 2 + 1] = FADE_DURATION;
+		transitions[i * 2 + 1] = fadeDuration;
 	}
 
 	return {
@@ -248,6 +249,7 @@ varying vec4 vNextUvRect;
 varying float vTransitionT;
 
 uniform sampler2D uAtlas;
+uniform float uSegmentOpacity;
 
 void main() {
   // Sample current segment from atlas
@@ -267,7 +269,7 @@ void main() {
 
   // Soften edges: scale both RGB and alpha together (premultiplied)
   float edgeAlpha = smoothstep(0.1, 0.3, color.a);
-  gl_FragColor = vec4(color.rgb * edgeAlpha, color.a * edgeAlpha);
+  gl_FragColor = vec4(color.rgb * edgeAlpha * uSegmentOpacity, color.a * edgeAlpha * uSegmentOpacity);
 }
 `;
 
@@ -309,7 +311,10 @@ function getSegmentWorldSize(
 	return [bboxW * KIMONO_SIZE, bboxH * KIMONO_SIZE];
 }
 
-function useSegmentSwitcher(switcherState: SwitcherState | null) {
+function useSegmentSwitcher(
+	switcherState: SwitcherState | null,
+	gui: GuiParams,
+) {
 	const nextSwitchTimeRef = useRef(-1);
 	const pendingTransitionsRef = useRef<Set<number>>(new Set());
 	const modeRef = useRef<CycleMode>("shuffling");
@@ -319,14 +324,27 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 
 	useFrame(({ clock }) => {
 		if (!switcherState) return;
+		if (!gui.animationEnabled) return;
+
 		const { segments, currentSegIds, attrs, origPositions, origSizes, origUvRects } =
 			switcherState;
 		const now = clock.getElapsedTime();
 
+		const {
+			switchIntervalMin,
+			switchIntervalMax,
+			fadeDuration,
+			shuffleDuration,
+			resetHoldDuration,
+			hopDuration,
+			hopCount,
+			staggerSpread,
+		} = gui;
+
 		// Initialize on first frame
 		if (cycleStartRef.current < 0) {
 			cycleStartRef.current = now;
-			nextSwitchTimeRef.current = now + SWITCH_INTERVAL_MIN;
+			nextSwitchTimeRef.current = now + switchIntervalMin;
 			return;
 		}
 
@@ -336,18 +354,18 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 		if (mode === "holding") {
 			const hopPlan = hopPlanRef.current;
 			const maxDelay = hopPlan ? Math.max(...hopPlan.staggerDelays) : 0;
-			const totalHopTime = RESET_HOP_COUNT * RESET_HOP_DURATION + maxDelay;
-			if (hopPlan && now - hopPlan.startTime >= totalHopTime + RESET_HOLD_DURATION) {
+			const totalHopTime = hopCount * hopDuration + maxDelay;
+			if (hopPlan && now - hopPlan.startTime >= totalHopTime + resetHoldDuration) {
 				modeRef.current = "shuffling";
 				cycleStartRef.current = now;
-				nextSwitchTimeRef.current = now + SWITCH_INTERVAL_MIN;
+				nextSwitchTimeRef.current = now + switchIntervalMin;
 				hopPlanRef.current = null;
 				lastHopIndexRef.current = -1;
 			}
 			return;
 		}
 
-		// ─── HOPPING MODE: 3-step hop animation ───
+		// ─── HOPPING MODE: multi-step hop animation ───
 		if (mode === "hopping") {
 			const hopPlan = hopPlanRef.current;
 			if (!hopPlan) return;
@@ -361,16 +379,15 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 				// Per-slot staggered time
 				const slotElapsed = now - hopPlan.startTime - hopPlan.staggerDelays[i];
 				if (slotElapsed < 0) {
-					// This slot hasn't started hopping yet — stay at current position
 					continue;
 				}
 
 				const slotHopIndex = Math.min(
-					Math.floor(slotElapsed / RESET_HOP_DURATION),
-					RESET_HOP_COUNT - 1,
+					Math.floor(slotElapsed / hopDuration),
+					hopCount - 1,
 				);
 				const hopLocalT = Math.min(
-					(slotElapsed - slotHopIndex * RESET_HOP_DURATION) / RESET_HOP_DURATION,
+					(slotElapsed - slotHopIndex * hopDuration) / hopDuration,
 					1.0,
 				);
 				// Ease-out cubic
@@ -405,7 +422,6 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 					currArr[off + c] =
 						fromSeg.uvRect[c] + (toSeg.uvRect[c] - fromSeg.uvRect[c]) * eased;
 				}
-				// Keep next = curr
 				for (let c = 0; c < 4; c++) {
 					nextArr[off + c] = currArr[off + c];
 				}
@@ -431,7 +447,7 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 
 			// Check if all hops are complete (including slowest staggered slot)
 			const maxDelay = Math.max(...hopPlan.staggerDelays);
-			const totalHopTime = RESET_HOP_COUNT * RESET_HOP_DURATION + maxDelay;
+			const totalHopTime = hopCount * hopDuration + maxDelay;
 			const elapsed = now - hopPlan.startTime;
 			if (elapsed >= totalHopTime) {
 				// Snap to final (original) positions
@@ -464,38 +480,33 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 		// ─── SHUFFLING MODE ───
 
 		// Check if it's time to enter hop mode
-		if (now - cycleStartRef.current >= SHUFFLE_DURATION) {
-			// Build hop plan: for each hop, pick a random segment target per slot
-			// Last hop (index RESET_HOP_COUNT-1) always targets the original segment (slot index)
+		if (now - cycleStartRef.current >= shuffleDuration) {
 			const targets: number[][] = [];
-			for (let hop = 0; hop < RESET_HOP_COUNT; hop++) {
+			for (let hop = 0; hop < hopCount; hop++) {
 				const hopTargets: number[] = [];
 				for (let i = 0; i < segments.length; i++) {
-					if (hop === RESET_HOP_COUNT - 1) {
-						// Last hop: return home
+					if (hop === hopCount - 1) {
 						hopTargets.push(i);
 					} else {
-						// Random segment position
 						hopTargets.push(Math.floor(Math.random() * segments.length));
 					}
 				}
 				targets.push(hopTargets);
 			}
-			const staggerDelays = segments.map(() => Math.random() * RESET_STAGGER_SPREAD);
+			const staggerDelays = segments.map(() => Math.random() * staggerSpread);
 			hopPlanRef.current = { targets, startTime: now, staggerDelays };
 			lastHopIndexRef.current = -1;
 			modeRef.current = "hopping";
 			return;
 		}
 
-		// Complete finished transitions: swap curr ← next, update position/size
+		// Complete finished transitions: swap curr ← next
 		for (const idx of pendingTransitionsRef.current) {
 			const startTime = (attrs.transition.array as Float32Array)[idx * 2];
 			const duration = (attrs.transition.array as Float32Array)[
 				idx * 2 + 1
 			];
 			if (now - startTime >= duration) {
-				// Copy next → curr
 				for (let c = 0; c < 4; c++) {
 					(attrs.currUvRect.array as Float32Array)[idx * 4 + c] = (
 						attrs.nextUvRect.array as Float32Array
@@ -503,7 +514,6 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 				}
 				attrs.currUvRect.needsUpdate = true;
 				attrs.currUvRect.version++;
-				// Reset transition
 				(attrs.transition.array as Float32Array)[idx * 2] = -999.0;
 				attrs.transition.needsUpdate = true;
 				attrs.transition.version++;
@@ -514,7 +524,6 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 		// Check if it's time to trigger a new switch
 		if (now < nextSwitchTimeRef.current) return;
 
-		// Pick a random segment slot that isn't currently transitioning
 		const available: number[] = [];
 		for (let i = 0; i < segments.length; i++) {
 			if (!pendingTransitionsRef.current.has(i)) {
@@ -524,15 +533,14 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 		if (available.length === 0) {
 			nextSwitchTimeRef.current =
 				now +
-				SWITCH_INTERVAL_MIN +
-				Math.random() * (SWITCH_INTERVAL_MAX - SWITCH_INTERVAL_MIN);
+				switchIntervalMin +
+				Math.random() * (switchIntervalMax - switchIntervalMin);
 			return;
 		}
 
 		const slotIdx =
 			available[Math.floor(Math.random() * available.length)];
 
-		// Pick a different segment texture
 		let nextSegId: number;
 		do {
 			nextSegId = Math.floor(Math.random() * segments.length);
@@ -541,7 +549,6 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 		const nextSeg = segments[nextSegId];
 		currentSegIds[slotIdx] = nextSegId;
 
-		// Update next UV rect attribute
 		const off = slotIdx * 4;
 		(attrs.nextUvRect.array as Float32Array)[off] = nextSeg.uvRect[0];
 		(attrs.nextUvRect.array as Float32Array)[off + 1] = nextSeg.uvRect[1];
@@ -550,24 +557,26 @@ function useSegmentSwitcher(switcherState: SwitcherState | null) {
 		attrs.nextUvRect.needsUpdate = true;
 		attrs.nextUvRect.version++;
 
-		// Start transition
 		(attrs.transition.array as Float32Array)[slotIdx * 2] = now;
 		(attrs.transition.array as Float32Array)[slotIdx * 2 + 1] =
-			FADE_DURATION;
+			fadeDuration;
 		attrs.transition.needsUpdate = true;
 		attrs.transition.version++;
 
 		pendingTransitionsRef.current.add(slotIdx);
 		nextSwitchTimeRef.current =
 			now +
-			SWITCH_INTERVAL_MIN +
-			Math.random() * (SWITCH_INTERVAL_MAX - SWITCH_INTERVAL_MIN);
+			switchIntervalMin +
+			Math.random() * (switchIntervalMax - switchIntervalMin);
 	});
 }
 
 // ─── Components ─────────────────────────────────────────────────────────────
 
-function KimonoBackground({ texture }: { texture: Texture | null }) {
+function KimonoBackground({
+	texture,
+	opacity,
+}: { texture: Texture | null; opacity: number }) {
 	if (!texture) return null;
 
 	return (
@@ -577,7 +586,7 @@ function KimonoBackground({ texture }: { texture: Texture | null }) {
 				map={texture}
 				side={DoubleSide}
 				transparent
-				opacity={BG_OPACITY}
+				opacity={opacity}
 			/>
 		</mesh>
 	);
@@ -586,9 +595,10 @@ function KimonoBackground({ texture }: { texture: Texture | null }) {
 type SakuraOverlayProps = {
 	segments: SegmentInfo[];
 	atlasTexture: Texture;
+	gui: GuiParams;
 };
 
-function SakuraOverlay({ segments, atlasTexture }: SakuraOverlayProps) {
+function SakuraOverlay({ segments, atlasTexture, gui }: SakuraOverlayProps) {
 	const meshRef = useRef<Mesh>(null);
 
 	const { geometry, switcherState, uniforms } = useMemo(() => {
@@ -612,6 +622,7 @@ function SakuraOverlay({ segments, atlasTexture }: SakuraOverlayProps) {
 		const u = {
 			uTime: { value: 0 },
 			uAtlas: { value: atlasTexture ?? emptyTex },
+			uSegmentOpacity: { value: 1.0 },
 		};
 
 		return {
@@ -634,9 +645,10 @@ function SakuraOverlay({ segments, atlasTexture }: SakuraOverlayProps) {
 
 	useFrame(({ clock }) => {
 		uniforms.uTime.value = clock.getElapsedTime();
+		uniforms.uSegmentOpacity.value = gui.segmentOpacity;
 	});
 
-	useSegmentSwitcher(switcherState);
+	useSegmentSwitcher(switcherState, gui);
 
 	return (
 		<mesh ref={meshRef} position={[0, 0, 0]}>
@@ -656,10 +668,47 @@ function SakuraOverlay({ segments, atlasTexture }: SakuraOverlayProps) {
 	);
 }
 
+function useDebugGui(): GuiParams {
+	const opacity = useControls("Opacity", {
+		bgOpacity: { value: 1.0, min: 0, max: 1, step: 0.01 },
+		segmentOpacity: { value: 1.0, min: 0, max: 1, step: 0.01 },
+	});
+
+	const animation = useControls("Animation", {
+		enabled: true,
+		switchIntervalMin: { value: 0.2, min: 0.05, max: 2, step: 0.05 },
+		switchIntervalMax: { value: 0.5, min: 0.05, max: 2, step: 0.05 },
+		fadeDuration: { value: 0.6, min: 0.1, max: 3, step: 0.1 },
+	});
+
+	const reset = useControls("Reset Cycle", {
+		shuffleDuration: { value: 5.0, min: 1, max: 30, step: 0.5 },
+		resetHoldDuration: { value: 1.0, min: 0, max: 5, step: 0.1 },
+		hopDuration: { value: 0.4, min: 0.1, max: 2, step: 0.05 },
+		hopCount: { value: 2, min: 1, max: 6, step: 1 },
+		staggerSpread: { value: 0.4, min: 0, max: 2, step: 0.05 },
+	});
+
+	return {
+		bgOpacity: opacity.bgOpacity,
+		segmentOpacity: opacity.segmentOpacity,
+		animationEnabled: animation.enabled,
+		switchIntervalMin: animation.switchIntervalMin,
+		switchIntervalMax: animation.switchIntervalMax,
+		fadeDuration: animation.fadeDuration,
+		shuffleDuration: reset.shuffleDuration,
+		resetHoldDuration: reset.resetHoldDuration,
+		hopDuration: reset.hopDuration,
+		hopCount: reset.hopCount,
+		staggerSpread: reset.staggerSpread,
+	};
+}
+
 function Scene() {
 	const [segments, setSegments] = useState<SegmentInfo[]>([]);
 	const [atlasTexture, setAtlasTexture] = useState<Texture | null>(null);
 	const [kimonoTexture, setKimonoTexture] = useState<Texture | null>(null);
+	const gui = useDebugGui();
 
 	useEffect(() => {
 		let disposed = false;
@@ -719,11 +768,14 @@ function Scene() {
 
 	return (
 		<>
-			<color attach="background" args={["#020617"]} />
 			<CameraControls />
-			<KimonoBackground texture={kimonoTexture} />
+			<KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} />
 			{atlasTexture && (
-				<SakuraOverlay segments={segments} atlasTexture={atlasTexture} />
+				<SakuraOverlay
+					segments={segments}
+					atlasTexture={atlasTexture}
+					gui={gui}
+				/>
 			)}
 		</>
 	);
