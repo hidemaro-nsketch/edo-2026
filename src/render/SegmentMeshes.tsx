@@ -30,6 +30,7 @@ attribute float aOpacity;
 attribute float aIsBlackFill;
 attribute float aWipeRole;
 attribute float aIsBboxOutline;
+attribute float aSwipeProgress;
 
 varying vec2 vUv;
 varying vec4 vUvRect;
@@ -37,6 +38,7 @@ varying float vOpacity;
 varying float vIsBlackFill;
 varying float vWipeRole;
 varying float vIsBboxOutline;
+varying float vSwipeProgress;
 
 void main() {
   vUv = uv;
@@ -45,6 +47,7 @@ void main() {
   vIsBlackFill = aIsBlackFill;
   vWipeRole = aWipeRole;
   vIsBboxOutline = aIsBboxOutline;
+  vSwipeProgress = aSwipeProgress;
 
   vec3 scaled = position * vec3(aSize, 1.0);
   vec3 worldPos = scaled + vec3(aPosition, aPositionZ);
@@ -62,9 +65,9 @@ varying float vOpacity;
 varying float vIsBlackFill;
 varying float vWipeRole;
 varying float vIsBboxOutline;
+varying float vSwipeProgress;
 
 uniform sampler2D uAtlas;
-uniform float uSwipeProgress;
 
 void main() {
   // Bbox outline mode: draw white wireframe border
@@ -81,7 +84,7 @@ void main() {
   // Swipe clipping: use local quad UV.x (0..1)
   if (vWipeRole > 0.5) {
     float x = vUv.x;
-    float p = uSwipeProgress;
+    float p = vSwipeProgress;
     if (vWipeRole < 1.5) {
       // Old segment: keep right portion, discard left as wipe progresses
       if (x < p) discard;
@@ -117,7 +120,6 @@ function createMaterial(atlas: Texture): ShaderMaterial {
     fragmentShader,
     uniforms: {
       uAtlas: { value: atlas },
-      uSwipeProgress: { value: 0 },
     },
     transparent: true,
     depthWrite: false,
@@ -139,6 +141,7 @@ type DynamicGeometry = {
   isBlackFill: InstancedBufferAttribute;
   wipeRole: InstancedBufferAttribute;
   isBboxOutline: InstancedBufferAttribute;
+  swipeProgress: InstancedBufferAttribute;
   maxInstances: number;
 };
 
@@ -157,6 +160,7 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
   const isBlackFill = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
   const wipeRole = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
   const isBboxOutline = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
+  const swipeProgress = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
 
   geo.setAttribute("aPosition", posXY);
   geo.setAttribute("aPositionZ", posZ);
@@ -166,9 +170,10 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
   geo.setAttribute("aIsBlackFill", isBlackFill);
   geo.setAttribute("aWipeRole", wipeRole);
   geo.setAttribute("aIsBboxOutline", isBboxOutline);
+  geo.setAttribute("aSwipeProgress", swipeProgress);
   geo.instanceCount = 0;
 
-  return { geo, posXY, posZ, size, uvRect, opacity, isBlackFill, wipeRole, isBboxOutline, maxInstances };
+  return { geo, posXY, posZ, size, uvRect, opacity, isBlackFill, wipeRole, isBboxOutline, swipeProgress, maxInstances };
 }
 
 function writeInstances(
@@ -204,6 +209,7 @@ function writeInstances(
     dg.isBlackFill.setX(i, 0);
     dg.wipeRole.setX(i, inst.wipeRole);
     dg.isBboxOutline.setX(i, inst.isBboxOutline);
+    dg.swipeProgress.setX(i, inst.swipeProgress);
   }
 
   // Write black fill instances after segment instances
@@ -227,6 +233,7 @@ function writeInstances(
       dg.isBlackFill.setX(idx, 1);
       dg.wipeRole.setX(idx, 0);
       dg.isBboxOutline.setX(idx, 0);
+      dg.swipeProgress.setX(idx, 0);
     }
   }
 
@@ -238,6 +245,7 @@ function writeInstances(
   dg.isBlackFill.needsUpdate = true;
   dg.wipeRole.needsUpdate = true;
   dg.isBboxOutline.needsUpdate = true;
+  dg.swipeProgress.needsUpdate = true;
 }
 
 function sortBackToFront(
@@ -285,6 +293,7 @@ function buildBaseGeometry(segments: SegmentInfo[]): DynamicGeometry {
       h: bboxH * KIMONO_SIZE,
       wipeRole: 0,
       isBboxOutline: 0,
+      swipeProgress: 0,
     });
   }
 
@@ -383,9 +392,6 @@ export function SegmentMeshes({
 
   useFrame((_, delta) => {
     buildSystem.update(delta);
-
-    // Update swipe progress uniform
-    material.uniforms.uSwipeProgress.value = buildSystem.getSwipeProgress();
 
     // Active instances (flying segments for current layer)
     const currentLayer = buildSystem.getCurrentLayer();

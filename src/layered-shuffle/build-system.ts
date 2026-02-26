@@ -18,6 +18,8 @@ export type SegmentInstance = {
   wipeRole: number;
   /** Whether this instance should render as a bbox outline */
   isBboxOutline: number;
+  /** Per-instance swipe progress (0..1), used when wipeRole > 0 */
+  swipeProgress: number;
 };
 
 /** Instance data for a black fill at a vacated slot (uses segment shape via atlas UV) */
@@ -55,12 +57,14 @@ export class BuildSystem {
   private staggerTimer = 0;
   /** Build stagger timer */
   private buildStaggerTimer = 0;
-  /** Flash state */
-  private flashCyclesRemaining = 0;
-  private flashTimer = 0;
-  private flashVisible = false;
   /** Segment IDs involved in the current layer's swaps (for flash) */
   private flashSegIds = new Set<number>();
+  /** Per-segment random delay offsets for flight stagger (segId → seconds) */
+  private flightStaggerOffsets = new Map<number, number>();
+  /** Per-swap-pair stagger state for instant layers: pairIndex → offset delay */
+  private pairStaggerOffsets: number[] = [];
+  /** Swap pair segment ID groups for staggered flash: [segIdA, segIdB][] */
+  private staggeredPairs: [number, number][] = [];
 
   constructor(plan: CompiledPlan, config: ShuffleConfig) {
     this.plan = plan;
@@ -81,10 +85,10 @@ export class BuildSystem {
       collapseTimer: 0,
       staggerTimer: 0,
       buildStaggerTimer: 0,
-      flashCyclesRemaining: 0,
-      flashTimer: 0,
-      flashVisible: false,
       flashSegIds: new Set<number>(),
+      flightStaggerOffsets: new Map<number, number>(),
+      pairStaggerOffsets: [],
+      staggeredPairs: [],
       state: { currentLayer: 1, phase: "flight" as BuildPhase, phaseTime: 0 },
     });
   }
@@ -135,7 +139,7 @@ export class BuildSystem {
         (leg) => leg.mode === "settle",
       );
       if (hasSettleLegs) {
-        this.startFlash();
+        this.startStaggeredFlash();
       } else {
         this.state.phase = "commit";
         this.state.phaseTime = 0;
@@ -143,64 +147,98 @@ export class BuildSystem {
       return;
     }
 
+    // Generate per-segment stagger offsets on first frame of flight
+    if (this.state.phaseTime === 0 && this.config.flightStagger > 0) {
+      this.flightStaggerOffsets.clear();
+      const legs = this.plan.legsByLayer[this.state.currentLayer] ?? [];
+      for (const leg of legs) {
+        this.flightStaggerOffsets.set(
+          leg.segId,
+          Math.random() * this.config.flightStagger,
+        );
+      }
+    }
+
     this.state.phaseTime += dt;
-    if (this.state.phaseTime >= this.config.flightDuration) {
+    const totalDuration = this.config.flightDuration + this.config.flightStagger;
+    if (this.state.phaseTime >= totalDuration) {
       this.state.phase = "hold";
       this.state.phaseTime = 0;
+      this.flightStaggerOffsets.clear();
     }
   }
 
-  /** Start the flash phase: collect swap segment IDs and initialize flash state */
-  private startFlash(): void {
-    if (this.config.flashCount <= 0) {
-      this.state.phase = "swipe";
+  /** Start staggered flash: each swap pair gets a random delay offset */
+  private startStaggeredFlash(): void {
+    const layer = this.state.currentLayer;
+    const prevMapping = this.plan.mappingByLayer[layer - 1];
+    const swaps = this.plan.swapsByLayer[layer] ?? [];
+
+    // Build per-pair data
+    this.staggeredPairs = swaps.map(([slotA, slotB]) => [
+      prevMapping[slotA],
+      prevMapping[slotB],
+    ]);
+    this.pairStaggerOffsets = this.staggeredPairs.map(
+      () => Math.random() * this.config.flightStagger,
+    );
+
+    // Collect all flash seg IDs (needed for getFlashInstances)
+    this.flashSegIds.clear();
+    for (const [a, b] of this.staggeredPairs) {
+      this.flashSegIds.add(a);
+      this.flashSegIds.add(b);
+    }
+
+    if (this.config.flashCount <= 0 && this.staggeredPairs.length === 0) {
+      this.state.phase = "commit";
       this.state.phaseTime = 0;
       return;
     }
 
-    const layer = this.state.currentLayer;
-    this.flashSegIds.clear();
-
-    // Collect segment IDs involved in swaps at this layer
-    const prevMapping = this.plan.mappingByLayer[layer - 1];
-    const swaps = this.plan.swapsByLayer[layer] ?? [];
-    for (const [slotA, slotB] of swaps) {
-      this.flashSegIds.add(prevMapping[slotA]);
-      this.flashSegIds.add(prevMapping[slotB]);
-    }
-
-    this.flashCyclesRemaining = this.config.flashCount;
-    this.flashTimer = 0;
-    this.flashVisible = true;
     this.state.phase = "flash";
     this.state.phaseTime = 0;
   }
 
-  private updateFlash(dt: number): void {
-    this.flashTimer += dt;
-    const duration = this.flashVisible
-      ? this.config.flashOnDuration
-      : this.config.flashOffDuration;
+  /** Total duration of flash cycles for one pair */
+  private getFlashDuration(): number {
+    return this.config.flashCount *
+      (this.config.flashOnDuration + this.config.flashOffDuration);
+  }
 
-    if (this.flashTimer >= duration) {
-      this.flashTimer -= duration;
-      if (this.flashVisible) {
-        // On → Off transition
-        this.flashVisible = false;
-      } else {
-        // Off → On transition: one cycle completed
-        this.flashCyclesRemaining -= 1;
-        if (this.flashCyclesRemaining <= 0) {
-          // Flash complete, proceed to swipe
-          this.flashVisible = false;
-          this.flashSegIds.clear();
-          this.state.phase = "swipe";
-          this.state.phaseTime = 0;
-          return;
-        }
-        this.flashVisible = true;
+  /** Get per-pair phase at current phaseTime: "waiting" | "flash" | "swipe" | "done" */
+  private getPairPhase(pairIndex: number): { phase: "waiting" | "flash" | "swipe" | "done"; localTime: number } {
+    const offset = this.pairStaggerOffsets[pairIndex] ?? 0;
+    const localTime = this.state.phaseTime - offset;
+    if (localTime < 0) return { phase: "waiting", localTime: 0 };
+
+    const flashDur = this.getFlashDuration();
+    if (localTime < flashDur) return { phase: "flash", localTime };
+
+    const swipeLocal = localTime - flashDur;
+    if (swipeLocal < this.config.flightDuration) return { phase: "swipe", localTime: swipeLocal };
+
+    return { phase: "done", localTime: swipeLocal };
+  }
+
+  private updateFlash(dt: number): void {
+    // Staggered mode: per-pair timeline
+    if (this.staggeredPairs.length > 0) {
+      this.state.phaseTime += dt;
+      // Check if all pairs are done
+      const allDone = this.staggeredPairs.every(
+        (_, i) => this.getPairPhase(i).phase === "done",
+      );
+      if (allDone) {
+        this.staggeredPairs = [];
+        this.pairStaggerOffsets = [];
+        this.flashSegIds.clear();
+        this.state.phase = "hold";
+        this.state.phaseTime = 0;
       }
+      return;
     }
+
   }
 
   private updateBuildStagger(dt: number): void {
@@ -246,6 +284,7 @@ export class BuildSystem {
           h: leg.toSize[1],
           wipeRole: 0,
           isBboxOutline: 0,
+          swipeProgress: 0,
           layer,
         });
         this.settledDirty = true;
@@ -338,20 +377,24 @@ export class BuildSystem {
         w: 0, h: 0,
         wipeRole: 0,
         isBboxOutline: 0,
+        swipeProgress: 0,
       });
     }
     return instances;
   }
 
-  /** Get swipe progress (0..1) for the uSwipeProgress uniform */
-  getSwipeProgress(): number {
+  /** Get swipe progress (0..1) for non-staggered swipe */
+  private getSwipeProgress(): number {
     if (this.state.phase !== "swipe") return 0;
     return Math.min(this.state.phaseTime / this.config.flightDuration, 1);
   }
 
   /** Whether the flash phase is currently showing bboxes */
   isFlashVisible(): boolean {
-    return this.state.phase === "flash" && this.flashVisible;
+    if (this.state.phase !== "flash") return false;
+    return this.staggeredPairs.some(
+      (_, i) => this.getPairPhase(i).phase === "flash",
+    );
   }
 
   /** Get segment IDs that are currently flashing */
@@ -381,11 +424,6 @@ export class BuildSystem {
       return this.getSwipeInstances();
     }
 
-    const t = phase === "flight"
-      ? Math.min(phaseTime / this.config.flightDuration, 1)
-      : 1; // hold phase: segments at destination
-
-    const eased = easeOutCubic(t);
     const instances: SegmentInstance[] = [];
     const settledIds = new Set<number>();
 
@@ -398,32 +436,128 @@ export class BuildSystem {
     const legs = this.plan.legsByLayer[currentLayer] ?? [];
     for (const leg of legs) {
       if (settledIds.has(leg.segId)) continue;
-      instances.push({ ...interpolateLeg(leg, eased), wipeRole: 0, isBboxOutline: 0 });
+      const offset = this.flightStaggerOffsets.get(leg.segId) ?? 0;
+      const t = phase === "flight"
+        ? Math.min(Math.max((phaseTime - offset) / this.config.flightDuration, 0), 1)
+        : 1; // hold phase: segments at destination
+      const eased = easeOutCubic(t);
+      instances.push({ ...interpolateLeg(leg, eased), wipeRole: 0, isBboxOutline: 0, swipeProgress: 0 });
     }
 
     return instances;
   }
 
-  /** Get instances for the flash phase: bbox outlines for swap segments */
+  /** Get instances for the flash phase: per-pair staggered flash/swipe */
   private getFlashInstances(): SegmentInstance[] {
-    if (!this.flashVisible) return [];
+    return this.getStaggeredFlashSwipeInstances();
+  }
 
+  /** Get staggered flash+swipe instances: each pair independently progresses through flash → swipe → done */
+  private getStaggeredFlashSwipeInstances(): SegmentInstance[] {
     const layer = this.state.currentLayer;
     const instances: SegmentInstance[] = [];
     const legs = this.plan.legsByLayer[layer] ?? [];
+    const prevMapping = this.plan.mappingByLayer[layer - 1];
+    const currMapping = this.plan.mappingByLayer[layer];
+    const settledIds = new Set<number>();
+    for (const s of this.settled) settledIds.add(s.segId);
 
+    // Build segId → leg lookup
+    const legBySegId = new Map<number, SegmentLeg>();
+    for (const leg of legs) legBySegId.set(leg.segId, leg);
+
+    // Segment IDs that are handled by a staggered pair (flash/swipe/done)
+    const handledSegIds = new Set<number>();
+
+    for (let i = 0; i < this.staggeredPairs.length; i++) {
+      const [segIdA, segIdB] = this.staggeredPairs[i];
+      const { phase: pairPhase, localTime } = this.getPairPhase(i);
+      handledSegIds.add(segIdA);
+      handledSegIds.add(segIdB);
+
+      if (pairPhase === "waiting") {
+        // Not started yet — show nothing for these segments
+        continue;
+      }
+
+      if (pairPhase === "flash") {
+        // Determine flash on/off from localTime within flash cycles
+        const cycleDuration = this.config.flashOnDuration + this.config.flashOffDuration;
+        const cyclePos = localTime % cycleDuration;
+        const isVisible = cyclePos < this.config.flashOnDuration;
+        if (!isVisible) continue;
+
+        for (const segId of [segIdA, segIdB]) {
+          const leg = legBySegId.get(segId);
+          if (!leg || settledIds.has(segId)) continue;
+          instances.push({
+            segId: leg.segId,
+            x: leg.from[0],
+            y: leg.from[1],
+            z: leg.from[2],
+            w: leg.fromSize[0],
+            h: leg.fromSize[1],
+            wipeRole: 0,
+            isBboxOutline: 1,
+            swipeProgress: 0,
+          });
+        }
+        continue;
+      }
+
+      // pairPhase === "swipe" or "done"
+      const swipeProgress = pairPhase === "done"
+        ? 1
+        : Math.min(localTime / this.config.flightDuration, 1);
+
+      for (const segId of [segIdA, segIdB]) {
+        const leg = legBySegId.get(segId);
+        if (!leg || settledIds.has(segId)) continue;
+        if (leg.mode === "pass") {
+          instances.push({
+            segId: leg.segId,
+            x: leg.to[0], y: leg.to[1], z: leg.to[2],
+            w: leg.toSize[0], h: leg.toSize[1],
+            wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
+          });
+        } else {
+          const destSlot = currMapping.indexOf(leg.segId);
+          const oldSegId = prevMapping[destSlot];
+          if (oldSegId === leg.segId) {
+            instances.push({
+              segId: leg.segId,
+              x: leg.to[0], y: leg.to[1], z: leg.to[2],
+              w: leg.toSize[0], h: leg.toSize[1],
+              wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
+            });
+          } else {
+            instances.push({
+              segId: oldSegId,
+              x: leg.to[0], y: leg.to[1], z: leg.to[2],
+              w: leg.toSize[0], h: leg.toSize[1],
+              wipeRole: swipeProgress >= 1 ? 0 : 1, isBboxOutline: 0,
+              swipeProgress,
+            });
+            instances.push({
+              segId: leg.segId,
+              x: leg.to[0], y: leg.to[1], z: leg.to[2],
+              w: leg.toSize[0], h: leg.toSize[1],
+              wipeRole: swipeProgress >= 1 ? 0 : 2, isBboxOutline: 0,
+              swipeProgress,
+            });
+          }
+        }
+      }
+    }
+
+    // Pass-through legs not involved in any pair: show at destination
     for (const leg of legs) {
-      if (!this.flashSegIds.has(leg.segId)) continue;
-      // Show bbox outline at the leg's from position (current position before swap)
+      if (handledSegIds.has(leg.segId) || settledIds.has(leg.segId)) continue;
       instances.push({
         segId: leg.segId,
-        x: leg.from[0],
-        y: leg.from[1],
-        z: leg.from[2],
-        w: leg.fromSize[0],
-        h: leg.fromSize[1],
-        wipeRole: 0,
-        isBboxOutline: 1,
+        x: leg.to[0], y: leg.to[1], z: leg.to[2],
+        w: leg.toSize[0], h: leg.toSize[1],
+        wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
       });
     }
 
@@ -435,6 +569,7 @@ export class BuildSystem {
     const layer = this.state.currentLayer;
     const instances: SegmentInstance[] = [];
     const settledIds = new Set<number>();
+    const progress = this.getSwipeProgress();
 
     for (const s of this.settled) {
       settledIds.add(s.segId);
@@ -448,56 +583,35 @@ export class BuildSystem {
       if (settledIds.has(leg.segId)) continue;
 
       if (leg.mode === "pass") {
-        // Pass-through: single instance at destination, no wipe
         instances.push({
           segId: leg.segId,
-          x: leg.to[0],
-          y: leg.to[1],
-          z: leg.to[2],
-          w: leg.toSize[0],
-          h: leg.toSize[1],
-          wipeRole: 0,
-          isBboxOutline: 0,
+          x: leg.to[0], y: leg.to[1], z: leg.to[2],
+          w: leg.toSize[0], h: leg.toSize[1],
+          wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
         });
       } else {
-        // Settle leg: find the old segment that was at this destination slot
         const destSlot = currMapping.indexOf(leg.segId);
         const oldSegId = prevMapping[destSlot];
 
         if (oldSegId === leg.segId) {
-          // Self-swap degenerate case: no wipe needed
           instances.push({
             segId: leg.segId,
-            x: leg.to[0],
-            y: leg.to[1],
-            z: leg.to[2],
-            w: leg.toSize[0],
-            h: leg.toSize[1],
-            wipeRole: 0,
-            isBboxOutline: 0,
+            x: leg.to[0], y: leg.to[1], z: leg.to[2],
+            w: leg.toSize[0], h: leg.toSize[1],
+            wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
           });
         } else {
-          // Old segment at destination slot (clipping away)
           instances.push({
             segId: oldSegId,
-            x: leg.to[0],
-            y: leg.to[1],
-            z: leg.to[2],
-            w: leg.toSize[0],
-            h: leg.toSize[1],
-            wipeRole: 1,
-            isBboxOutline: 0,
+            x: leg.to[0], y: leg.to[1], z: leg.to[2],
+            w: leg.toSize[0], h: leg.toSize[1],
+            wipeRole: 1, isBboxOutline: 0, swipeProgress: progress,
           });
-          // New segment at destination slot (revealing)
           instances.push({
             segId: leg.segId,
-            x: leg.to[0],
-            y: leg.to[1],
-            z: leg.to[2],
-            w: leg.toSize[0],
-            h: leg.toSize[1],
-            wipeRole: 2,
-            isBboxOutline: 0,
+            x: leg.to[0], y: leg.to[1], z: leg.to[2],
+            w: leg.toSize[0], h: leg.toSize[1],
+            wipeRole: 2, isBboxOutline: 0, swipeProgress: progress,
           });
         }
       }
@@ -544,6 +658,7 @@ export class BuildSystem {
         h: settledLeg.toSize[1],
         wipeRole: 0,
         isBboxOutline: 0,
+        swipeProgress: 0,
       });
     }
 
@@ -604,10 +719,6 @@ export class BuildSystem {
       ? currentLayer
       : this.config.maxGenerations;
 
-    const t = phase === "flight"
-      ? easeOutCubic(Math.min(phaseTime / this.config.flightDuration, 1))
-      : 1;
-
     for (let layer = 1; layer <= maxBuiltLayer; layer++) {
       const legs = this.plan.legsByLayer[layer] ?? [];
       const isCurrentLayer = layer === currentLayer && (phase === "flight" || phase === "hold");
@@ -616,7 +727,11 @@ export class BuildSystem {
         if (leg.mode === "pass") continue;
 
         if (isCurrentLayer) {
-          const inst = interpolateLeg(leg, t);
+          const offset = this.flightStaggerOffsets.get(leg.segId) ?? 0;
+          const segT = phase === "flight"
+            ? easeOutCubic(Math.min(Math.max((phaseTime - offset) / this.config.flightDuration, 0), 1))
+            : 1;
+          const inst = interpolateLeg(leg, segT);
           lines.push({
             from: leg.from,
             to: [inst.x, inst.y, inst.z],
@@ -680,6 +795,7 @@ function interpolateLeg(leg: SegmentLeg, t: number): SegmentInstance {
     h: leg.fromSize[1] + (leg.toSize[1] - leg.fromSize[1]) * t,
     wipeRole: 0,
     isBboxOutline: 0,
+    swipeProgress: 0,
   };
 }
 
@@ -694,5 +810,6 @@ function interpolateLegReverse(leg: SegmentLeg, t: number): SegmentInstance {
     h: leg.toSize[1] + (leg.fromSize[1] - leg.toSize[1]) * t,
     wipeRole: 0,
     isBboxOutline: 0,
+    swipeProgress: 0,
   };
 }

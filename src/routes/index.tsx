@@ -49,7 +49,7 @@ function useDebugGui(): DebugGuiResult {
 
 	const animation = useControls("Animation", {
 		flightDuration: { value: 0.5, min: 0.1, max: 6, step: 0.1 },
-		holdDuration: { value: 4.0, min: 0, max: 10, step: 0.1 },
+		holdDuration: { value: 2.0, min: 0, max: 10, step: 0.1 },
 	});
 
 	const layers = useControls("Layers", {
@@ -66,6 +66,7 @@ function useDebugGui(): DebugGuiResult {
 
 	const build = useControls("Build", {
 		buildStagger: { value: 0.08, min: 0, max: 2, step: 0.01 },
+		flightStagger: { value: 2.0, min: 0, max: 5, step: 0.01 },
 	});
 
 	const flash = useControls("Flash", {
@@ -286,6 +287,8 @@ function Scene() {
 				gui.animationStartLayer ?? DEFAULT_CONFIG.animationStartLayer,
 			buildStagger:
 				gui.buildStagger ?? DEFAULT_CONFIG.buildStagger,
+			flightStagger:
+				gui.flightStagger ?? DEFAULT_CONFIG.flightStagger,
 			flashCount:
 				gui.flashCount ?? DEFAULT_CONFIG.flashCount,
 			flashOnDuration:

@@ -24,6 +24,8 @@ export type ShuffleConfig = {
   flashOnDuration: number;
   /** Duration of flash-off period in seconds */
   flashOffDuration: number;
+  /** Stagger delay spread for per-segment flight start within a layer in seconds */
+  flightStagger: number;
 };
 
 /** A pair of slot indices to swap */
@@ -123,4 +125,5 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
   flashCount: 3,
   flashOnDuration: 0.07,
   flashOffDuration: 0.07,
+  flightStagger: 2.0,
 };
