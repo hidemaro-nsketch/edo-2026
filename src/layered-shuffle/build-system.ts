@@ -179,7 +179,8 @@ export class BuildSystem {
     // Clear settled — collapse uses legs for reverse-flight rendering
     this.settled = [];
     this.settledDirty = true;
-    // blackFills are kept — removed layer by layer during collapse
+    // Clear all black fills at once when collapse starts
+    this.blackFills = [];
   }
 
   private updateCollapse(dt: number): void {
@@ -196,12 +197,6 @@ export class BuildSystem {
 
     this.collapseTimer += dt;
     if (this.collapseTimer >= this.config.collapseDuration) {
-      // Remove black fills for the layer that just finished collapsing
-      const removedLayer = this.collapsingLayer;
-      this.blackFills = this.blackFills.filter(
-        (bf) => bf.sourceLayer !== removedLayer,
-      );
-
       this.collapsingLayer -= 1;
       if (this.collapsingLayer <= 0) {
         this.state.phase = "holding";
