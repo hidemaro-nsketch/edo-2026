@@ -55,6 +55,7 @@ function useDebugGui(): DebugGuiResult {
 	const layers = useControls("Layers", {
 		maxGenerations: { value: 10, min: 1, max: 20, step: 1 },
 		layerSpacing: { value: 0.5, min: 0.1, max: 4, step: 0.1 },
+		animationStartLayer: { value: 5, min: 1, max: 20, step: 1 },
 	});
 
 	const collapse = useControls("Collapse", {
@@ -271,6 +272,8 @@ function Scene() {
 				gui.collapseStagger ?? DEFAULT_CONFIG.collapseStagger,
 			holdAfterComplete:
 				gui.holdAfterComplete ?? DEFAULT_CONFIG.holdAfterComplete,
+			animationStartLayer:
+				gui.animationStartLayer ?? DEFAULT_CONFIG.animationStartLayer,
 		}),
 		[gui],
 	);

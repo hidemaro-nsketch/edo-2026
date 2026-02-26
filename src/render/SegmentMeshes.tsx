@@ -13,7 +13,7 @@ import {
   Vector3,
   type Texture,
 } from "three";
-import type { BuildSystem, SegmentInstance } from "../layered-shuffle/build-system";
+import type { BlackFillInstance, BuildSystem, SegmentInstance } from "../layered-shuffle/build-system";
 import { KIMONO_SIZE } from "../sakura/constants";
 import type { SegmentInfo } from "../sakura/types";
 
@@ -27,15 +27,18 @@ attribute float aPositionZ;
 attribute vec2 aSize;
 attribute vec4 aUvRect;
 attribute float aOpacity;
+attribute float aIsBlackFill;
 
 varying vec2 vUv;
 varying vec4 vUvRect;
 varying float vOpacity;
+varying float vIsBlackFill;
 
 void main() {
   vUv = uv;
   vUvRect = aUvRect;
   vOpacity = aOpacity;
+  vIsBlackFill = aIsBlackFill;
 
   vec3 scaled = position * vec3(aSize, 1.0);
   vec3 worldPos = scaled + vec3(aPosition, aPositionZ);
@@ -50,10 +53,16 @@ precision highp float;
 varying vec2 vUv;
 varying vec4 vUvRect;
 varying float vOpacity;
+varying float vIsBlackFill;
 
 uniform sampler2D uAtlas;
 
 void main() {
+  if (vIsBlackFill > 0.5) {
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
+
   vec2 flippedUv = vec2(vUv.x, 1.0 - vUv.y);
   vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
   vec4 color = texture2D(uAtlas, atlasUv);
@@ -88,6 +97,7 @@ type DynamicGeometry = {
   size: InstancedBufferAttribute;
   uvRect: InstancedBufferAttribute;
   opacity: InstancedBufferAttribute;
+  isBlackFill: InstancedBufferAttribute;
   maxInstances: number;
 };
 
@@ -103,27 +113,35 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
   const size = new InstancedBufferAttribute(new Float32Array(maxInstances * 2), 2);
   const uvRect = new InstancedBufferAttribute(new Float32Array(maxInstances * 4), 4);
   const opacity = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
+  const isBlackFill = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
 
   geo.setAttribute("aPosition", posXY);
   geo.setAttribute("aPositionZ", posZ);
   geo.setAttribute("aSize", size);
   geo.setAttribute("aUvRect", uvRect);
   geo.setAttribute("aOpacity", opacity);
+  geo.setAttribute("aIsBlackFill", isBlackFill);
   geo.instanceCount = 0;
 
-  return { geo, posXY, posZ, size, uvRect, opacity, maxInstances };
+  return { geo, posXY, posZ, size, uvRect, opacity, isBlackFill, maxInstances };
 }
 
 function writeInstances(
   dg: DynamicGeometry,
   instances: SegmentInstance[],
   segments: SegmentInfo[],
+  blackFills?: BlackFillInstance[],
   opacityOverride?: Map<number, number>,
 ): void {
-  const count = Math.min(instances.length, dg.maxInstances);
-  dg.geo.instanceCount = count;
+  const segCount = Math.min(instances.length, dg.maxInstances);
+  const bfCount = blackFills
+    ? Math.min(blackFills.length, dg.maxInstances - segCount)
+    : 0;
+  const totalCount = segCount + bfCount;
+  dg.geo.instanceCount = totalCount;
 
-  for (let i = 0; i < count; i++) {
+  // Write segment instances
+  for (let i = 0; i < segCount; i++) {
     const inst = instances[i];
     dg.posXY.setXY(i, inst.x, inst.y);
     dg.posZ.setX(i, inst.z);
@@ -138,6 +156,28 @@ function writeInstances(
 
     const op = opacityOverride?.get(inst.segId) ?? 1;
     dg.opacity.setX(i, op);
+    dg.isBlackFill.setX(i, 0);
+  }
+
+  // Write black fill instances after segment instances
+  if (blackFills) {
+    for (let i = 0; i < bfCount; i++) {
+      const bf = blackFills[i];
+      const idx = segCount + i;
+      dg.posXY.setXY(idx, bf.x, bf.y);
+      dg.posZ.setX(idx, bf.z);
+      dg.size.setXY(idx, bf.w, bf.h);
+
+      // Black fills don't use atlas UVs, but set to zero
+      const off = idx * 4;
+      dg.uvRect.array[off] = 0;
+      dg.uvRect.array[off + 1] = 0;
+      dg.uvRect.array[off + 2] = 0;
+      dg.uvRect.array[off + 3] = 0;
+
+      dg.opacity.setX(idx, 1);
+      dg.isBlackFill.setX(idx, 1);
+    }
   }
 
   dg.posXY.needsUpdate = true;
@@ -145,6 +185,7 @@ function writeInstances(
   dg.size.needsUpdate = true;
   dg.uvRect.needsUpdate = true;
   dg.opacity.needsUpdate = true;
+  dg.isBlackFill.needsUpdate = true;
 }
 
 function sortBackToFront(
@@ -255,13 +296,16 @@ export function SegmentMeshes({
 
   const layerCount = buildSystem.config.maxGenerations;
 
+  // Each layer pool needs space for segments + potential black fills
+  const maxPerLayer = segments.length * 2;
+
   const { baseGeo, activeGeo, material, settledPool } = useMemo(() => {
     const bg = buildBaseGeometry(segments);
     const ag = createDynamicGeometry(segments.length);
     const mat = createMaterial(atlasTexture);
-    const pool = createLayerMeshPool(segments.length, mat, layerCount);
+    const pool = createLayerMeshPool(maxPerLayer, mat, layerCount);
     return { baseGeo: bg, activeGeo: ag, material: mat, settledPool: pool };
-  }, [segments, atlasTexture, layerCount]);
+  }, [segments, atlasTexture, layerCount, maxPerLayer]);
 
   const baseMeshRef = useRef<Mesh>(new Mesh(baseGeo.geo, material));
   const activeMeshRef = useRef<Mesh>(new Mesh(activeGeo.geo, material));
@@ -297,13 +341,27 @@ export function SegmentMeshes({
     );
     writeInstances(activeGeo, activeInstances, segments);
 
-    // Settled instances grouped by layer
+    // Settled instances + black fills grouped by layer
     const settledByLayer = buildSystem.getSettledByLayer();
+    const allBlackFills = buildSystem.getBlackFillInstances();
+
+    // Group black fills by their source layer
+    const blackFillsByLayer = new Map<number, BlackFillInstance[]>();
+    for (const bf of allBlackFills) {
+      let arr = blackFillsByLayer.get(bf.sourceLayer);
+      if (!arr) {
+        arr = [];
+        blackFillsByLayer.set(bf.sourceLayer, arr);
+      }
+      arr.push(bf);
+    }
+
     for (let i = 0; i < layerCount; i++) {
       const layerIdx = i + 1; // layers 1..maxGenerations
       const layerInstances = settledByLayer.get(layerIdx) ?? [];
       const sorted = sortBackToFront(layerInstances, camera, viewDirRef.current);
-      writeInstances(settledPool.geos[i], sorted, segments);
+      const layerBlackFills = blackFillsByLayer.get(layerIdx);
+      writeInstances(settledPool.geos[i], sorted, segments, layerBlackFills);
       settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");
     }
   });

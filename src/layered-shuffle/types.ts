@@ -14,6 +14,8 @@ export type ShuffleConfig = {
   collapseStagger: number;
   /** Pause duration after collapse before loop restart in seconds */
   holdAfterComplete: number;
+  /** First layer that uses flight animation (layers below this commit instantly) */
+  animationStartLayer: number;
 };
 
 /** A pair of slot indices to swap */
@@ -48,6 +50,16 @@ export type SegmentLifecycle = {
   legs: SegmentLeg[];
 };
 
+/** A slot vacated by a segment moving away during a swap */
+export type VacatedSlot = {
+  /** Slot index that was vacated */
+  slotIndex: number;
+  /** World position [x, y, z] on the source layer */
+  position: [number, number, number];
+  /** World size [w, h] matching bboxInSource */
+  size: [number, number];
+};
+
 /** Pre-computed plan for the entire shuffle sequence */
 export type CompiledPlan = {
   /** All segment lifecycles */
@@ -60,6 +72,8 @@ export type CompiledPlan = {
   swapsByLayer: SwapPair[][];
   /** Slot-to-segment mapping at each layer (after all swaps applied) */
   mappingByLayer: number[][];
+  /** Slots vacated by swaps at each layer (black fill targets) */
+  vacatedByLayer: VacatedSlot[][];
 };
 
 /** Phase of the build state machine */
@@ -91,4 +105,5 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
   collapseDuration: 0.2,
   collapseStagger: 0.08,
   holdAfterComplete: 1.0,
+  animationStartLayer: 5,
 };

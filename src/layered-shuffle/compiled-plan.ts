@@ -10,6 +10,7 @@ import type {
   SegmentLifecycle,
   ShuffleConfig,
   SwapPair,
+  VacatedSlot,
 } from "./types";
 
 /**
@@ -163,11 +164,42 @@ export function compilePlan(
     lifecycles.push({ segId, settleLayer: sLayer, finalSlot, legs });
   }
 
+  // Build vacated slots per layer: for each swap, both slots are "vacated"
+  // by the segment that was previously there (it moves to the other slot)
+  const vacatedByLayer: VacatedSlot[][] = [[]]; // layer 0 has no vacated slots
+  for (let layer = 1; layer <= maxGen; layer++) {
+    const vacated: VacatedSlot[] = [];
+    const sourceZ = (layer - 1) * config.layerSpacing;
+
+    for (const [slotA, slotB] of swapsByLayer[layer]) {
+      // Slot A is vacated by prevMapping[slotA] (which moves to slotB)
+      const [axPos, ayPos] = getSlotWorldPos(segments, slotA);
+      const [aw, ah] = getSlotWorldSize(segments, slotA);
+      vacated.push({
+        slotIndex: slotA,
+        position: [axPos, ayPos, sourceZ],
+        size: [aw, ah],
+      });
+
+      // Slot B is vacated by prevMapping[slotB] (which moves to slotA)
+      const [bxPos, byPos] = getSlotWorldPos(segments, slotB);
+      const [bw, bh] = getSlotWorldSize(segments, slotB);
+      vacated.push({
+        slotIndex: slotB,
+        position: [bxPos, byPos, sourceZ],
+        size: [bw, bh],
+      });
+    }
+
+    vacatedByLayer.push(vacated);
+  }
+
   return {
     lifecycles,
     legsByLayer,
     settleIdsByLayer,
     swapsByLayer,
     mappingByLayer,
+    vacatedByLayer,
   };
 }

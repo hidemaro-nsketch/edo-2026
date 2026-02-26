@@ -16,6 +16,17 @@ export type SegmentInstance = {
   h: number;
 };
 
+/** Instance data for a black fill rectangle at a vacated slot */
+export type BlackFillInstance = {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+  h: number;
+  /** Layer where this black fill was created (for collapse removal) */
+  sourceLayer: number;
+};
+
 /**
  * Runtime system that drives the sequential layer-build animation.
  * Operates on a CompiledPlan and produces segment instance data each frame.
@@ -31,6 +42,8 @@ export class BuildSystem {
   private settled: (SegmentInstance & { layer: number })[] = [];
   private settledByLayerCache = new Map<number, SegmentInstance[]>();
   private settledDirty = true;
+  /** Black fill rectangles at vacated slots (append-only during build) */
+  private blackFills: BlackFillInstance[] = [];
   /** Collapse: current layer being reverse-played */
   private collapsingLayer = -1;
   private collapseTimer = 0;
@@ -50,6 +63,7 @@ export class BuildSystem {
       settled: [],
       settledByLayerCache: new Map(),
       settledDirty: true,
+      blackFills: [],
       collapsingLayer: -1,
       collapseTimer: 0,
       staggerTimer: 0,
@@ -81,7 +95,19 @@ export class BuildSystem {
     }
   }
 
+  /** Whether the current layer should skip flight animation */
+  private isInstantLayer(): boolean {
+    return this.state.currentLayer < this.config.animationStartLayer;
+  }
+
   private updateFlight(dt: number): void {
+    // Instant layers skip flight and hold, go straight to commit
+    if (this.isInstantLayer()) {
+      this.state.phase = "commit";
+      this.state.phaseTime = 0;
+      return;
+    }
+
     this.state.phaseTime += dt;
     if (this.state.phaseTime >= this.config.flightDuration) {
       this.state.phase = "hold";
@@ -117,6 +143,19 @@ export class BuildSystem {
       }
     }
 
+    // Add black fills for vacated slots on the source layer
+    const vacated = this.plan.vacatedByLayer[layer] ?? [];
+    for (const v of vacated) {
+      this.blackFills.push({
+        x: v.position[0],
+        y: v.position[1],
+        z: v.position[2],
+        w: v.size[0],
+        h: v.size[1],
+        sourceLayer: layer,
+      });
+    }
+
     // Advance to next layer or complete
     if (layer >= this.config.maxGenerations) {
       this.state.phase = "complete";
@@ -136,6 +175,7 @@ export class BuildSystem {
     // Clear settled — collapse uses legs for reverse-flight rendering
     this.settled = [];
     this.settledDirty = true;
+    // blackFills are kept — removed layer by layer during collapse
   }
 
   private updateCollapse(dt: number): void {
@@ -152,6 +192,12 @@ export class BuildSystem {
 
     this.collapseTimer += dt;
     if (this.collapseTimer >= this.config.collapseDuration) {
+      // Remove black fills for the layer that just finished collapsing
+      const removedLayer = this.collapsingLayer;
+      this.blackFills = this.blackFills.filter(
+        (bf) => bf.sourceLayer !== removedLayer,
+      );
+
       this.collapsingLayer -= 1;
       if (this.collapsingLayer <= 0) {
         this.state.phase = "holding";
@@ -276,6 +322,11 @@ export class BuildSystem {
     }
     this.settledDirty = false;
     return this.settledByLayerCache;
+  }
+
+  /** Get all active black fill instances */
+  getBlackFillInstances(): BlackFillInstance[] {
+    return this.blackFills;
   }
 
   /** Get current layer being built */
