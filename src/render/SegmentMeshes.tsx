@@ -29,12 +29,14 @@ attribute vec4 aUvRect;
 attribute float aOpacity;
 attribute float aIsBlackFill;
 attribute float aWipeRole;
+attribute float aIsBboxOutline;
 
 varying vec2 vUv;
 varying vec4 vUvRect;
 varying float vOpacity;
 varying float vIsBlackFill;
 varying float vWipeRole;
+varying float vIsBboxOutline;
 
 void main() {
   vUv = uv;
@@ -42,6 +44,7 @@ void main() {
   vOpacity = aOpacity;
   vIsBlackFill = aIsBlackFill;
   vWipeRole = aWipeRole;
+  vIsBboxOutline = aIsBboxOutline;
 
   vec3 scaled = position * vec3(aSize, 1.0);
   vec3 worldPos = scaled + vec3(aPosition, aPositionZ);
@@ -58,11 +61,23 @@ varying vec4 vUvRect;
 varying float vOpacity;
 varying float vIsBlackFill;
 varying float vWipeRole;
+varying float vIsBboxOutline;
 
 uniform sampler2D uAtlas;
 uniform float uSwipeProgress;
 
 void main() {
+  // Bbox outline mode: draw white wireframe border
+  if (vIsBboxOutline > 0.5) {
+    float borderW = 0.02;
+    float x = vUv.x;
+    float y = vUv.y;
+    bool onEdge = x < borderW || x > (1.0 - borderW) || y < borderW || y > (1.0 - borderW);
+    if (!onEdge) discard;
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    return;
+  }
+
   // Swipe clipping: use local quad UV.x (0..1)
   if (vWipeRole > 0.5) {
     float x = vUv.x;
@@ -123,6 +138,7 @@ type DynamicGeometry = {
   opacity: InstancedBufferAttribute;
   isBlackFill: InstancedBufferAttribute;
   wipeRole: InstancedBufferAttribute;
+  isBboxOutline: InstancedBufferAttribute;
   maxInstances: number;
 };
 
@@ -140,6 +156,7 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
   const opacity = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
   const isBlackFill = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
   const wipeRole = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
+  const isBboxOutline = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
 
   geo.setAttribute("aPosition", posXY);
   geo.setAttribute("aPositionZ", posZ);
@@ -148,9 +165,10 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
   geo.setAttribute("aOpacity", opacity);
   geo.setAttribute("aIsBlackFill", isBlackFill);
   geo.setAttribute("aWipeRole", wipeRole);
+  geo.setAttribute("aIsBboxOutline", isBboxOutline);
   geo.instanceCount = 0;
 
-  return { geo, posXY, posZ, size, uvRect, opacity, isBlackFill, wipeRole, maxInstances };
+  return { geo, posXY, posZ, size, uvRect, opacity, isBlackFill, wipeRole, isBboxOutline, maxInstances };
 }
 
 function writeInstances(
@@ -185,6 +203,7 @@ function writeInstances(
     dg.opacity.setX(i, op);
     dg.isBlackFill.setX(i, 0);
     dg.wipeRole.setX(i, inst.wipeRole);
+    dg.isBboxOutline.setX(i, inst.isBboxOutline);
   }
 
   // Write black fill instances after segment instances
@@ -207,6 +226,7 @@ function writeInstances(
       dg.opacity.setX(idx, 1);
       dg.isBlackFill.setX(idx, 1);
       dg.wipeRole.setX(idx, 0);
+      dg.isBboxOutline.setX(idx, 0);
     }
   }
 
@@ -217,6 +237,7 @@ function writeInstances(
   dg.opacity.needsUpdate = true;
   dg.isBlackFill.needsUpdate = true;
   dg.wipeRole.needsUpdate = true;
+  dg.isBboxOutline.needsUpdate = true;
 }
 
 function sortBackToFront(
@@ -263,6 +284,7 @@ function buildBaseGeometry(segments: SegmentInfo[]): DynamicGeometry {
       w: bboxW * KIMONO_SIZE,
       h: bboxH * KIMONO_SIZE,
       wipeRole: 0,
+      isBboxOutline: 0,
     });
   }
 
@@ -355,7 +377,7 @@ export function SegmentMeshes({
       baseGeo.geo.dispose();
       activeGeo.geo.dispose();
       material.dispose();
-      for (const dg of settledPool.geos) dg.geo.dispose();
+      for (const geo of settledPool.geos) geo.geo.dispose();
     };
   }, [baseGeo, activeGeo, material, settledPool]);
 

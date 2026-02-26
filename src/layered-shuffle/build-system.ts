@@ -16,6 +16,8 @@ export type SegmentInstance = {
   h: number;
   /** Wipe role: 0 = normal, 1 = old (clipping away), 2 = new (revealing) */
   wipeRole: number;
+  /** Whether this instance should render as a bbox outline */
+  isBboxOutline: number;
 };
 
 /** Instance data for a black fill at a vacated slot (uses segment shape via atlas UV) */
@@ -51,6 +53,14 @@ export class BuildSystem {
   private collapsingLayer = -1;
   private collapseTimer = 0;
   private staggerTimer = 0;
+  /** Build stagger timer */
+  private buildStaggerTimer = 0;
+  /** Flash state */
+  private flashCyclesRemaining = 0;
+  private flashTimer = 0;
+  private flashVisible = false;
+  /** Segment IDs involved in the current layer's swaps (for flash) */
+  private flashSegIds = new Set<number>();
 
   constructor(plan: CompiledPlan, config: ShuffleConfig) {
     this.plan = plan;
@@ -70,6 +80,11 @@ export class BuildSystem {
       collapsingLayer: -1,
       collapseTimer: 0,
       staggerTimer: 0,
+      buildStaggerTimer: 0,
+      flashCyclesRemaining: 0,
+      flashTimer: 0,
+      flashVisible: false,
+      flashSegIds: new Set<number>(),
       state: { currentLayer: 1, phase: "flight" as BuildPhase, phaseTime: 0 },
     });
   }
@@ -80,11 +95,17 @@ export class BuildSystem {
       case "flight":
         this.updateFlight(deltaTime);
         return;
+      case "flash":
+        this.updateFlash(deltaTime);
+        return;
       case "hold":
         this.updateHold(deltaTime);
         return;
       case "swipe":
         this.updateSwipe(deltaTime);
+        return;
+      case "buildStagger":
+        this.updateBuildStagger(deltaTime);
         return;
       case "commit":
         this.commitLayer();
@@ -107,15 +128,14 @@ export class BuildSystem {
   }
 
   private updateFlight(dt: number): void {
-    // Instant layers: use swipe transition if there are settle legs, otherwise commit
+    // Instant layers: use flash → swipe transition if there are settle legs, otherwise commit
     if (this.isInstantLayer()) {
       const layer = this.state.currentLayer;
       const hasSettleLegs = (this.plan.legsByLayer[layer] ?? []).some(
         (leg) => leg.mode === "settle",
       );
       if (hasSettleLegs) {
-        this.state.phase = "swipe";
-        this.state.phaseTime = 0;
+        this.startFlash();
       } else {
         this.state.phase = "commit";
         this.state.phaseTime = 0;
@@ -126,6 +146,68 @@ export class BuildSystem {
     this.state.phaseTime += dt;
     if (this.state.phaseTime >= this.config.flightDuration) {
       this.state.phase = "hold";
+      this.state.phaseTime = 0;
+    }
+  }
+
+  /** Start the flash phase: collect swap segment IDs and initialize flash state */
+  private startFlash(): void {
+    if (this.config.flashCount <= 0) {
+      this.state.phase = "swipe";
+      this.state.phaseTime = 0;
+      return;
+    }
+
+    const layer = this.state.currentLayer;
+    this.flashSegIds.clear();
+
+    // Collect segment IDs involved in swaps at this layer
+    const prevMapping = this.plan.mappingByLayer[layer - 1];
+    const swaps = this.plan.swapsByLayer[layer] ?? [];
+    for (const [slotA, slotB] of swaps) {
+      this.flashSegIds.add(prevMapping[slotA]);
+      this.flashSegIds.add(prevMapping[slotB]);
+    }
+
+    this.flashCyclesRemaining = this.config.flashCount;
+    this.flashTimer = 0;
+    this.flashVisible = true;
+    this.state.phase = "flash";
+    this.state.phaseTime = 0;
+  }
+
+  private updateFlash(dt: number): void {
+    this.flashTimer += dt;
+    const duration = this.flashVisible
+      ? this.config.flashOnDuration
+      : this.config.flashOffDuration;
+
+    if (this.flashTimer >= duration) {
+      this.flashTimer -= duration;
+      if (this.flashVisible) {
+        // On → Off transition
+        this.flashVisible = false;
+      } else {
+        // Off → On transition: one cycle completed
+        this.flashCyclesRemaining -= 1;
+        if (this.flashCyclesRemaining <= 0) {
+          // Flash complete, proceed to swipe
+          this.flashVisible = false;
+          this.flashSegIds.clear();
+          this.state.phase = "swipe";
+          this.state.phaseTime = 0;
+          return;
+        }
+        this.flashVisible = true;
+      }
+    }
+  }
+
+  private updateBuildStagger(dt: number): void {
+    this.buildStaggerTimer -= dt;
+    if (this.buildStaggerTimer <= 0) {
+      this.buildStaggerTimer = 0;
+      this.state.phase = "flight";
       this.state.phaseTime = 0;
     }
   }
@@ -163,6 +245,7 @@ export class BuildSystem {
           w: leg.toSize[0],
           h: leg.toSize[1],
           wipeRole: 0,
+          isBboxOutline: 0,
           layer,
         });
         this.settledDirty = true;
@@ -189,8 +272,14 @@ export class BuildSystem {
       this.startCollapse();
     } else {
       this.state.currentLayer = layer + 1;
-      this.state.phase = "flight";
-      this.state.phaseTime = 0;
+      if (this.config.buildStagger > 0) {
+        this.buildStaggerTimer = this.config.buildStagger;
+        this.state.phase = "buildStagger";
+        this.state.phaseTime = 0;
+      } else {
+        this.state.phase = "flight";
+        this.state.phaseTime = 0;
+      }
     }
   }
 
@@ -248,6 +337,7 @@ export class BuildSystem {
         x: 0, y: 0, z: 0, // will be filled by renderer from segments
         w: 0, h: 0,
         wipeRole: 0,
+        isBboxOutline: 0,
       });
     }
     return instances;
@@ -259,6 +349,16 @@ export class BuildSystem {
     return Math.min(this.state.phaseTime / this.config.flightDuration, 1);
   }
 
+  /** Whether the flash phase is currently showing bboxes */
+  isFlashVisible(): boolean {
+    return this.state.phase === "flash" && this.flashVisible;
+  }
+
+  /** Get segment IDs that are currently flashing */
+  getFlashSegIds(): ReadonlySet<number> {
+    return this.flashSegIds;
+  }
+
   /** Get all active (in-flight + passing-through) segment instances */
   getActiveInstances(): SegmentInstance[] {
     const { currentLayer, phase, phaseTime } = this.state;
@@ -267,8 +367,13 @@ export class BuildSystem {
       return this.getCollapseInstances();
     }
 
-    if (phase === "complete" || phase === "holding" || phase === "idle") {
+    if (phase === "complete" || phase === "holding" || phase === "idle" || phase === "buildStagger") {
       return [];
+    }
+
+    // Flash phase: show bbox outlines for flashing segments, hide others
+    if (phase === "flash") {
+      return this.getFlashInstances();
     }
 
     // Swipe phase: emit dual instances for swap pairs
@@ -293,7 +398,33 @@ export class BuildSystem {
     const legs = this.plan.legsByLayer[currentLayer] ?? [];
     for (const leg of legs) {
       if (settledIds.has(leg.segId)) continue;
-      instances.push({ ...interpolateLeg(leg, eased), wipeRole: 0 });
+      instances.push({ ...interpolateLeg(leg, eased), wipeRole: 0, isBboxOutline: 0 });
+    }
+
+    return instances;
+  }
+
+  /** Get instances for the flash phase: bbox outlines for swap segments */
+  private getFlashInstances(): SegmentInstance[] {
+    if (!this.flashVisible) return [];
+
+    const layer = this.state.currentLayer;
+    const instances: SegmentInstance[] = [];
+    const legs = this.plan.legsByLayer[layer] ?? [];
+
+    for (const leg of legs) {
+      if (!this.flashSegIds.has(leg.segId)) continue;
+      // Show bbox outline at the leg's from position (current position before swap)
+      instances.push({
+        segId: leg.segId,
+        x: leg.from[0],
+        y: leg.from[1],
+        z: leg.from[2],
+        w: leg.fromSize[0],
+        h: leg.fromSize[1],
+        wipeRole: 0,
+        isBboxOutline: 1,
+      });
     }
 
     return instances;
@@ -326,6 +457,7 @@ export class BuildSystem {
           w: leg.toSize[0],
           h: leg.toSize[1],
           wipeRole: 0,
+          isBboxOutline: 0,
         });
       } else {
         // Settle leg: find the old segment that was at this destination slot
@@ -342,6 +474,7 @@ export class BuildSystem {
             w: leg.toSize[0],
             h: leg.toSize[1],
             wipeRole: 0,
+            isBboxOutline: 0,
           });
         } else {
           // Old segment at destination slot (clipping away)
@@ -353,6 +486,7 @@ export class BuildSystem {
             w: leg.toSize[0],
             h: leg.toSize[1],
             wipeRole: 1,
+            isBboxOutline: 0,
           });
           // New segment at destination slot (revealing)
           instances.push({
@@ -363,6 +497,7 @@ export class BuildSystem {
             w: leg.toSize[0],
             h: leg.toSize[1],
             wipeRole: 2,
+            isBboxOutline: 0,
           });
         }
       }
@@ -408,6 +543,7 @@ export class BuildSystem {
         w: settledLeg.toSize[0],
         h: settledLeg.toSize[1],
         wipeRole: 0,
+        isBboxOutline: 0,
       });
     }
 
@@ -455,11 +591,16 @@ export class BuildSystem {
       return this.getCollapseLines();
     }
 
-    if (phase === "holding" || phase === "idle") {
+    if (phase === "holding" || phase === "idle" || phase === "buildStagger") {
       return [];
     }
 
-    const maxBuiltLayer = phase === "flight" || phase === "hold" || phase === "commit"
+    // During flash phase, don't show connection lines (only bbox outlines visible)
+    if (phase === "flash") {
+      return [];
+    }
+
+    const maxBuiltLayer = phase === "flight" || phase === "hold" || phase === "commit" || phase === "swipe"
       ? currentLayer
       : this.config.maxGenerations;
 
@@ -538,6 +679,7 @@ function interpolateLeg(leg: SegmentLeg, t: number): SegmentInstance {
     w: leg.fromSize[0] + (leg.toSize[0] - leg.fromSize[0]) * t,
     h: leg.fromSize[1] + (leg.toSize[1] - leg.fromSize[1]) * t,
     wipeRole: 0,
+    isBboxOutline: 0,
   };
 }
 
@@ -551,5 +693,6 @@ function interpolateLegReverse(leg: SegmentLeg, t: number): SegmentInstance {
     w: leg.toSize[0] + (leg.fromSize[0] - leg.toSize[0]) * t,
     h: leg.toSize[1] + (leg.fromSize[1] - leg.toSize[1]) * t,
     wipeRole: 0,
+    isBboxOutline: 0,
   };
 }

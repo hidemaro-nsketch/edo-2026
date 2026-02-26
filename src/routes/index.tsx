@@ -12,6 +12,7 @@ import { SegmentMeshes } from "../render/SegmentMeshes";
 import { KIMONO_SIZE } from "../sakura/constants";
 import { loadAtlasTextures } from "../sakura/segment-manager";
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
+import { ConnectionLines } from "../render/ConnectionLines";
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -63,6 +64,16 @@ function useDebugGui(): DebugGuiResult {
 		holdAfterComplete: { value: 1.0, min: 0, max: 5, step: 0.1 },
 	});
 
+	const build = useControls("Build", {
+		buildStagger: { value: 0.08, min: 0, max: 2, step: 0.01 },
+	});
+
+	const flash = useControls("Flash", {
+		flashCount: { value: 5, min: 0, max: 8, step: 1 },
+		flashOnDuration: { value: 0.08, min: 0.02, max: 0.5, step: 0.01 },
+		flashOffDuration: { value: 0.03, min: 0.02, max: 0.5, step: 0.01 },
+	});
+
 	useControls("Actions", {
 		Reset: button(() => {
 			resetTriggerRef.current += 1;
@@ -70,7 +81,7 @@ function useDebugGui(): DebugGuiResult {
 		}),
 	});
 
-	return { ...opacity, ...animation, ...layers, ...collapse, resetTrigger };
+	return { ...opacity, ...animation, ...layers, ...collapse, ...build, ...flash, resetTrigger };
 }
 
 // ─── KimonoBackground ───────────────────────────────────────────────────────
@@ -157,7 +168,7 @@ function ShuffleContent({
 				atlasTexture={atlasTexture}
 				buildSystem={system}
 			/>
-			{/* <ConnectionLines buildSystem={system} /> */}
+			<ConnectionLines buildSystem={system} />
 		</>
 	);
 }
@@ -273,6 +284,14 @@ function Scene() {
 				gui.holdAfterComplete ?? DEFAULT_CONFIG.holdAfterComplete,
 			animationStartLayer:
 				gui.animationStartLayer ?? DEFAULT_CONFIG.animationStartLayer,
+			buildStagger:
+				gui.buildStagger ?? DEFAULT_CONFIG.buildStagger,
+			flashCount:
+				gui.flashCount ?? DEFAULT_CONFIG.flashCount,
+			flashOnDuration:
+				gui.flashOnDuration ?? DEFAULT_CONFIG.flashOnDuration,
+			flashOffDuration:
+				gui.flashOffDuration ?? DEFAULT_CONFIG.flashOffDuration,
 		}),
 		[gui],
 	);

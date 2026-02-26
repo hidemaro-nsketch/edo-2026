@@ -16,6 +16,14 @@ export type ShuffleConfig = {
   holdAfterComplete: number;
   /** First layer that uses flight animation (layers below this commit instantly) */
   animationStartLayer: number;
+  /** Stagger delay between consecutive layer builds in seconds */
+  buildStagger: number;
+  /** Number of bbox flash cycles before swipe (0 to disable) */
+  flashCount: number;
+  /** Duration of flash-on period in seconds */
+  flashOnDuration: number;
+  /** Duration of flash-off period in seconds */
+  flashOffDuration: number;
 };
 
 /** A pair of slot indices to swap */
@@ -80,14 +88,16 @@ export type CompiledPlan = {
 
 /** Phase of the build state machine */
 export type BuildPhase =
-  | "flight"     // segments flying from prev layer to current
-  | "hold"       // brief pause after flight
-  | "swipe"      // instant layer: horizontal wipe transition for swap pairs
-  | "commit"     // settling segments, advancing to next layer
-  | "complete"   // all layers built
-  | "collapsing" // collapse animation
-  | "holding"    // pause after collapse before restart
-  | "idle";      // not started
+  | "flight"        // segments flying from prev layer to current
+  | "hold"          // brief pause after flight
+  | "flash"         // bbox wireframe flash before swipe
+  | "swipe"         // instant layer: horizontal wipe transition for swap pairs
+  | "buildStagger"  // delay between consecutive layer builds
+  | "commit"        // settling segments, advancing to next layer
+  | "complete"      // all layers built
+  | "collapsing"    // collapse animation
+  | "holding"       // pause after collapse before restart
+  | "idle";         // not started
 
 /** Runtime state for the sequential layer build */
 export type BuildState = {
@@ -109,4 +119,8 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
   collapseStagger: 0.08,
   holdAfterComplete: 1.0,
   animationStartLayer: 5,
+  buildStagger: 0.08,
+  flashCount: 3,
+  flashOnDuration: 0.07,
+  flashOffDuration: 0.07,
 };
