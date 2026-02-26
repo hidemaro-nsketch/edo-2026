@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
-import { useControls } from "leva";
+import { button, useControls } from "leva";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	CustomBlending,
@@ -43,6 +43,7 @@ type GuiParams = {
 	hopDuration: number;
 	hopCount: number;
 	staggerSpread: number;
+	resetTrigger: number;
 };
 
 const SAKURA_BASE_PATH = "/sakura";
@@ -252,12 +253,15 @@ uniform sampler2D uAtlas;
 uniform float uSegmentOpacity;
 
 void main() {
+  // Flip V to match atlas with flipY=false (origin at top-left)
+  vec2 flippedUv = vec2(vUv.x, 1.0 - vUv.y);
+
   // Sample current segment from atlas
-  vec2 currAtlasUv = vCurrUvRect.xy + vUv * vCurrUvRect.zw;
+  vec2 currAtlasUv = vCurrUvRect.xy + flippedUv * vCurrUvRect.zw;
   vec4 currColor = texture2D(uAtlas, currAtlasUv);
 
   // Sample next segment from atlas
-  vec2 nextAtlasUv = vNextUvRect.xy + vUv * vNextUvRect.zw;
+  vec2 nextAtlasUv = vNextUvRect.xy + flippedUv * vNextUvRect.zw;
   vec4 nextColor = texture2D(uAtlas, nextAtlasUv);
 
   // Cross-fade between current and next (both are premultiplied alpha)
@@ -321,9 +325,56 @@ function useSegmentSwitcher(
 	const cycleStartRef = useRef(-1);
 	const hopPlanRef = useRef<HopPlan | null>(null);
 	const lastHopIndexRef = useRef(-1);
+	const lastResetTriggerRef = useRef(0);
 
 	useFrame(({ clock }) => {
 		if (!switcherState) return;
+
+		// Handle manual reset trigger from GUI button
+		if (gui.resetTrigger !== lastResetTriggerRef.current) {
+			lastResetTriggerRef.current = gui.resetTrigger;
+			const { segments, currentSegIds, attrs, origPositions, origSizes, origUvRects } =
+				switcherState;
+			const posArr = attrs.position_attr.array as Float32Array;
+			const sizeArr = attrs.size_attr.array as Float32Array;
+			const currArr = attrs.currUvRect.array as Float32Array;
+			const nextArr = attrs.nextUvRect.array as Float32Array;
+			const transArr = attrs.transition.array as Float32Array;
+
+			for (let i = 0; i < segments.length; i++) {
+				posArr[i * 2] = origPositions[i * 2];
+				posArr[i * 2 + 1] = origPositions[i * 2 + 1];
+				sizeArr[i * 2] = origSizes[i * 2];
+				sizeArr[i * 2 + 1] = origSizes[i * 2 + 1];
+				currentSegIds[i] = i;
+				const off = i * 4;
+				for (let c = 0; c < 4; c++) {
+					currArr[off + c] = origUvRects[off + c];
+					nextArr[off + c] = origUvRects[off + c];
+				}
+				transArr[i * 2] = -999.0;
+			}
+			attrs.position_attr.needsUpdate = true;
+			attrs.position_attr.version++;
+			attrs.size_attr.needsUpdate = true;
+			attrs.size_attr.version++;
+			attrs.currUvRect.needsUpdate = true;
+			attrs.currUvRect.version++;
+			attrs.nextUvRect.needsUpdate = true;
+			attrs.nextUvRect.version++;
+			attrs.transition.needsUpdate = true;
+			attrs.transition.version++;
+			pendingTransitionsRef.current.clear();
+
+			// Restart the cycle from shuffling
+			modeRef.current = "shuffling";
+			cycleStartRef.current = clock.getElapsedTime();
+			nextSwitchTimeRef.current = clock.getElapsedTime() + gui.switchIntervalMin;
+			hopPlanRef.current = null;
+			lastHopIndexRef.current = -1;
+			return;
+		}
+
 		if (!gui.animationEnabled) return;
 
 		const { segments, currentSegIds, attrs, origPositions, origSizes, origUvRects } =
@@ -669,6 +720,9 @@ function SakuraOverlay({ segments, atlasTexture, gui }: SakuraOverlayProps) {
 }
 
 function useDebugGui(): GuiParams {
+	const resetTriggerRef = useRef(0);
+	const [resetTrigger, setResetTrigger] = useState(0);
+
 	const opacity = useControls("Opacity", {
 		bgOpacity: { value: 1.0, min: 0, max: 1, step: 0.01 },
 		segmentOpacity: { value: 1.0, min: 0, max: 1, step: 0.01 },
@@ -689,6 +743,13 @@ function useDebugGui(): GuiParams {
 		staggerSpread: { value: 0.4, min: 0, max: 2, step: 0.05 },
 	});
 
+	useControls("Actions", {
+		"Reset Position": button(() => {
+			resetTriggerRef.current += 1;
+			setResetTrigger(resetTriggerRef.current);
+		}),
+	});
+
 	return {
 		bgOpacity: opacity.bgOpacity,
 		segmentOpacity: opacity.segmentOpacity,
@@ -701,6 +762,7 @@ function useDebugGui(): GuiParams {
 		hopDuration: reset.hopDuration,
 		hopCount: reset.hopCount,
 		staggerSpread: reset.staggerSpread,
+		resetTrigger,
 	};
 }
 
