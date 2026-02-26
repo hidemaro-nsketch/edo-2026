@@ -2,6 +2,7 @@ import {
   DEFAULT_CONFIG,
   type LayerState,
   type ShuffleConfig,
+  type SwapPair,
   type SystemPhase,
 } from "./types";
 
@@ -20,6 +21,8 @@ export class LayerStack {
   private pendingSlotToSegId: number[];
   /** Set of slot indices that changed during the current generation */
   private pendingChanges: Set<number>;
+  /** Pre-computed swap pairs for the current generation */
+  private swapQueue: SwapPair[];
   /** Index of the layer currently being collapsed (top-down) */
   private collapsingIndex: number;
   /** Accumulated time for the current collapsing layer */
@@ -35,6 +38,7 @@ export class LayerStack {
     this.phase = "frozen";
     this.pendingSlotToSegId = [];
     this.pendingChanges = new Set();
+    this.swapQueue = [];
     this.collapsingIndex = -1;
     this.collapseTimer = 0;
     this.staggerTimer = 0;
@@ -78,6 +82,11 @@ export class LayerStack {
     this.pendingSlotToSegId = [...lastLayer.slotToSegId];
     this.pendingChanges = new Set();
     this.currentGen = lastLayer.gen + 1;
+    this.swapQueue = generateSwapPairs(
+      this.currentGen,
+      this.config.maxGenerations,
+      this.segmentCount,
+    );
     this.phase = "shuffling";
   }
 
@@ -103,6 +112,39 @@ export class LayerStack {
     // If reverted back to original, remove from changes
     this.pendingChanges.delete(slotIdx);
     return false;
+  }
+
+  /**
+   * Apply a pair swap: two slots exchange their segment IDs.
+   * Calls applyShuffle twice atomically.
+   */
+  applySwap(slotA: number, slotB: number): void {
+    const segIdA = this.pendingSlotToSegId[slotA];
+    const segIdB = this.pendingSlotToSegId[slotB];
+    this.applyShuffle(slotA, segIdB);
+    this.applyShuffle(slotB, segIdA);
+  }
+
+  /**
+   * Pop the next swap pair from the pre-computed queue.
+   * Returns undefined if no swaps remain.
+   */
+  popNextSwap(): SwapPair | undefined {
+    return this.swapQueue.shift();
+  }
+
+  /**
+   * Check if there are remaining swap pairs in the queue.
+   */
+  hasSwapsRemaining(): boolean {
+    return this.swapQueue.length > 0;
+  }
+
+  /**
+   * Get the number of remaining swap pairs in the queue.
+   */
+  getSwapQueueLength(): number {
+    return this.swapQueue.length;
   }
 
   /**
@@ -237,6 +279,7 @@ export class LayerStack {
     this.phase = "frozen";
     this.pendingSlotToSegId = [];
     this.pendingChanges = new Set();
+    this.swapQueue = [];
     this.collapsingIndex = -1;
     this.collapseTimer = 0;
     this.staggerTimer = 0;
@@ -256,5 +299,36 @@ export class LayerStack {
   getAliveLayers(): LayerState[] {
     return this.layers.filter((layer) => layer.alive);
   }
+}
 
+/**
+ * Generate swap pairs for a given generation.
+ * Swap count increases progressively using a t^1.5 curve.
+ * No slot appears in more than one pair per generation.
+ */
+function generateSwapPairs(
+  gen: number,
+  maxGenerations: number,
+  segmentCount: number,
+): SwapPair[] {
+  const maxSwaps = Math.floor(segmentCount / 2);
+  const t = maxGenerations <= 1 ? 1 : (gen - 1) / (maxGenerations - 1);
+  const swapCount = Math.min(
+    Math.round(1 + (maxSwaps - 1) * t ** 1.5),
+    maxSwaps,
+  );
+
+  const indices = Array.from({ length: segmentCount }, (_, i) => i);
+  // Fisher-Yates shuffle to pick random non-overlapping pairs
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+
+  const pairs: SwapPair[] = [];
+  for (let i = 0; i < swapCount * 2; i += 2) {
+    pairs.push([indices[i], indices[i + 1]]);
+  }
+
+  return pairs;
 }

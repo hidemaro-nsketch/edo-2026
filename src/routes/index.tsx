@@ -144,7 +144,7 @@ function handleFrozen(
 function handleShuffling(
 	stack: LayerStack,
 	now: number,
-	segments: SegmentInfo[],
+	_segments: SegmentInfo[],
 	config: ShuffleConfig,
 	refs: TimingRefs,
 	syncLayers: (layers: LayerState[]) => void,
@@ -153,31 +153,36 @@ function handleShuffling(
 ): void {
 	const elapsed = now - refs.genStartTime.current;
 
+	// Freeze when shuffle duration is exceeded (swaps may already be done)
 	if (elapsed >= config.shuffleDuration) {
+		// Apply all remaining swaps before freezing
+		while (stack.hasSwapsRemaining()) {
+			const pair = stack.popNextSwap();
+			if (pair) stack.applySwap(pair[0], pair[1]);
+		}
 		stack.freezeGeneration();
 		syncLayers([...stack.getAliveLayers()]);
 		syncGen(stack.currentGen);
 		return;
 	}
 
+	// No more swaps to apply — wait for duration to expire
+	if (!stack.hasSwapsRemaining()) return;
+
 	if (now < refs.nextSwitchTime.current) return;
 
-	const slotIdx = Math.floor(Math.random() * segments.length);
-	const prevLayer = stack.layers[stack.layers.length - 1];
-	let nextSegId: number;
-	do {
-		nextSegId = Math.floor(Math.random() * segments.length);
-	} while (
-		nextSegId === prevLayer.slotToSegId[slotIdx] &&
-		segments.length > 1
-	);
+	// Pop next pre-computed swap pair and apply it
+	const pair = stack.popNextSwap();
+	if (pair) {
+		stack.applySwap(pair[0], pair[1]);
+	}
 
-	stack.applyShuffle(slotIdx, nextSegId);
-
-	refs.nextSwitchTime.current =
-		now +
-		config.switchIntervalMin +
-		Math.random() * (config.switchIntervalMax - config.switchIntervalMin);
+	// Schedule next swap: distribute remaining swaps evenly across remaining time
+	const remainingTime = config.shuffleDuration - elapsed;
+	const remainingSwaps = stack.getSwapQueueLength();
+	const evenInterval = remainingSwaps > 0 ? remainingTime / remainingSwaps : remainingTime;
+	const interval = Math.max(config.switchIntervalMin, Math.min(evenInterval, config.switchIntervalMax));
+	refs.nextSwitchTime.current = now + interval;
 
 	bumpVersion();
 }

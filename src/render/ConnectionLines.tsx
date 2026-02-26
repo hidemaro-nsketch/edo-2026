@@ -45,8 +45,18 @@ export function ConnectionLines({
       const zTo = layer.z;
 
       for (const link of layer.linksFromPrev) {
-        const [x, y] = getSlotWorldPos(segments, link.slotIndex);
-        positions.push(x, y, zFrom, x, y, zTo);
+        // Current slot position (where the segment ended up)
+        const [xTo, yTo] = getSlotWorldPos(segments, link.slotIndex);
+
+        // Find where this segment was in the previous layer
+        const prevSlot = prevLayer.slotToSegId.indexOf(link.currSegId);
+        if (prevSlot >= 0) {
+          const [xFrom, yFrom] = getSlotWorldPos(segments, prevSlot);
+          positions.push(xFrom, yFrom, zFrom, xTo, yTo, zTo);
+        } else {
+          // Fallback: vertical line if prev slot not found
+          positions.push(xTo, yTo, zFrom, xTo, yTo, zTo);
+        }
       }
     }
 

@@ -45,6 +45,9 @@ export type LayerState = {
   }>;
 };
 
+/** A pair of slot indices to swap */
+export type SwapPair = [slotA: number, slotB: number];
+
 /** Overall phase of the layered shuffle system */
 export type SystemPhase =
   | "shuffling"   // actively shuffling current generation
