@@ -54,7 +54,7 @@ function useDebugGui(): DebugGuiResult {
 
 	const layers = useControls("Layers", {
 		maxGenerations: { value: 10, min: 1, max: 20, step: 1 },
-		layerSpacing: { value: 1.0, min: 0.1, max: 4, step: 0.1 },
+		layerSpacing: { value: 0.5, min: 0.1, max: 4, step: 0.1 },
 	});
 
 	const collapse = useControls("Collapse", {
@@ -147,17 +147,17 @@ function ShuffleContent({
 
 	return (
 		<>
-			{/* <CameraAndLifecycle
+			<CameraAndLifecycle
 				buildSystem={system}
 				segments={segments}
 				config={config}
-			/> */}
+			/>
 			<SegmentMeshes
 				segments={segments}
 				atlasTexture={atlasTexture}
 				buildSystem={system}
 			/>
-			{/* <ConnectionLines buildSystem={system} /> */}
+			<ConnectionLines buildSystem={system} />
 		</>
 	);
 }
@@ -299,7 +299,7 @@ function App() {
 		<div className="h-100vh min-h-[520px]">
 			<Canvas
 				orthographic
-				camera={{ position: [0, 2, 2], zoom: 200, near: 0.1, far: 100 }}
+				camera={{ position: [0, 0, 50], zoom: 200, near: 0.1, far: 200 }}
 			>
 				<color attach="background" args={["black"]} />
 				<OrbitControls />
