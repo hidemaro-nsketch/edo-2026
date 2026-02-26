@@ -1,6 +1,7 @@
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import {
+  Camera,
   CustomBlending,
   DoubleSide,
   InstancedBufferAttribute,
@@ -10,6 +11,7 @@ import {
   OneMinusSrcAlphaFactor,
   PlaneGeometry,
   ShaderMaterial,
+  Vector3,
   type Texture,
 } from "three";
 import type { BuildSystem, SegmentInstance } from "../layered-shuffle/build-system";
@@ -57,9 +59,7 @@ void main() {
   vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
   vec4 color = texture2D(uAtlas, atlasUv);
 
-  if (color.a < 0.1) discard;
-
-  float edgeAlpha = smoothstep(0.1, 0.3, color.a);
+  float edgeAlpha = smoothstep(0.0, 0.3, color.a);
   float finalOpacity = edgeAlpha * vOpacity;
   gl_FragColor = vec4(color.rgb * finalOpacity, color.a * finalOpacity);
 }
@@ -149,6 +149,28 @@ function writeInstances(
   dg.opacity.needsUpdate = true;
 }
 
+function sortBackToFront(
+  instances: SegmentInstance[],
+  camera: Camera,
+  viewDir: Vector3,
+): SegmentInstance[] {
+  if (instances.length <= 1) return instances;
+
+  camera.getWorldDirection(viewDir);
+  const cx = camera.position.x;
+  const cy = camera.position.y;
+  const cz = camera.position.z;
+  const dx = viewDir.x;
+  const dy = viewDir.y;
+  const dz = viewDir.z;
+
+  return [...instances].sort((a, b) => {
+    const depthA = (a.x - cx) * dx + (a.y - cy) * dy + (a.z - cz) * dz;
+    const depthB = (b.x - cx) * dx + (b.y - cy) * dy + (b.z - cz) * dz;
+    return depthB - depthA;
+  });
+}
+
 // ─── Base mesh (static layer 0) ─────────────────────────────────────────────
 
 function buildBaseGeometry(segments: SegmentInfo[]): DynamicGeometry {
@@ -192,6 +214,9 @@ export function SegmentMeshes({
   atlasTexture,
   buildSystem,
 }: SegmentMeshesProps) {
+  const { camera } = useThree();
+  const viewDirRef = useRef(new Vector3());
+
   const { baseGeo, activeGeo, settledGeo, material } = useMemo(() => {
     const bg = buildBaseGeometry(segments);
     const ag = createDynamicGeometry(segments.length);
@@ -217,10 +242,18 @@ export function SegmentMeshes({
   useFrame((_, delta) => {
     buildSystem.update(delta);
 
-    const activeInstances = buildSystem.getActiveInstances();
+    const activeInstances = sortBackToFront(
+      buildSystem.getActiveInstances(),
+      camera,
+      viewDirRef.current,
+    );
     writeInstances(activeGeo, activeInstances, segments);
 
-    const settledInstances = buildSystem.getSettledInstances();
+    const settledInstances = sortBackToFront(
+      buildSystem.getSettledInstances(),
+      camera,
+      viewDirRef.current,
+    );
     writeInstances(settledGeo, settledInstances, segments);
   });
 

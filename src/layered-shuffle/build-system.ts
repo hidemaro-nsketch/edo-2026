@@ -217,29 +217,33 @@ export class BuildSystem {
     const instances: SegmentInstance[] = [];
     const progress = Math.min(this.collapseTimer / this.config.collapseDuration, 1);
     const eased = easeOutCubic(progress);
+    const animatingSegIds = new Set<number>();
 
     // Current collapsing layer: reverse-fly legs (to → from)
     const legs = this.plan.legsByLayer[this.collapsingLayer] ?? [];
     for (const leg of legs) {
+      animatingSegIds.add(leg.segId);
       instances.push(interpolateLegReverse(leg, eased));
     }
 
-    // Already-collapsed layers (above collapsingLayer): show at from position (layer 0 side)
-    // These have already reverse-flown back, so they're gone (not rendered)
+    // Segments settled below the current collapsing layer stay fixed at
+    // their settle-layer destination. This avoids rendering the same segment
+    // many times across multiple pass-through layers.
+    for (const lifecycle of this.plan.lifecycles) {
+      if (lifecycle.settleLayer >= this.collapsingLayer) continue;
+      if (animatingSegIds.has(lifecycle.segId)) continue;
 
-    // Layers below collapsingLayer that haven't collapsed yet: show at settled (to) position
-    for (let layer = this.collapsingLayer - 1; layer >= 1; layer--) {
-      const layerLegs = this.plan.legsByLayer[layer] ?? [];
-      for (const leg of layerLegs) {
-        instances.push({
-          segId: leg.segId,
-          x: leg.to[0],
-          y: leg.to[1],
-          z: leg.to[2],
-          w: leg.toSize[0],
-          h: leg.toSize[1],
-        });
-      }
+      const settledLeg = lifecycle.legs[lifecycle.legs.length - 1];
+      if (!settledLeg) continue;
+
+      instances.push({
+        segId: lifecycle.segId,
+        x: settledLeg.to[0],
+        y: settledLeg.to[1],
+        z: settledLeg.to[2],
+        w: settledLeg.toSize[0],
+        h: settledLeg.toSize[1],
+      });
     }
 
     return instances;
