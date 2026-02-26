@@ -49,13 +49,13 @@ function useDebugGui(): DebugGuiResult {
 
 	const animation = useControls("Animation", {
 		flightDuration: { value: 0.5, min: 0.1, max: 6, step: 0.1 },
-		holdDuration: { value: 2.0, min: 0, max: 10, step: 0.1 },
+		holdDuration: { value: 1.0, min: 0, max: 10, step: 0.1 },
 	});
 
 	const layers = useControls("Layers", {
-		maxGenerations: { value: 8, min: 1, max: 20, step: 1 },
+		maxGenerations: { value: 10, min: 1, max: 20, step: 1 },
 		layerSpacing: { value: 1.5, min: 0.1, max: 4, step: 0.1 },
-		animationStartLayer: { value: 5, min: 1, max: 20, step: 1 },
+		animationStartLayer: { value: 7, min: 1, max: 20, step: 1 },
 	});
 
 	const collapse = useControls("Collapse", {
@@ -66,11 +66,11 @@ function useDebugGui(): DebugGuiResult {
 
 	const build = useControls("Build", {
 		buildStagger: { value: 0.08, min: 0, max: 2, step: 0.01 },
-		flightStagger: { value: 2.0, min: 0, max: 5, step: 0.01 },
+		flightStagger: { value: 0.8, min: 0, max: 5, step: 0.01 },
 	});
 
 	const flash = useControls("Flash", {
-		flashCount: { value: 5, min: 0, max: 8, step: 1 },
+		flashCount: { value: 4, min: 0, max: 8, step: 1 },
 		flashOnDuration: { value: 0.08, min: 0.02, max: 0.5, step: 0.01 },
 		flashOffDuration: { value: 0.03, min: 0.02, max: 0.5, step: 0.01 },
 	});
