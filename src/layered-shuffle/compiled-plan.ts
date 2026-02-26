@@ -90,6 +90,47 @@ function generateSwapPairs(
 }
 
 /**
+ * Generate a full random permutation of all slots, decomposed into swap pairs.
+ * Used for non-instant layers where every segment moves to a new position.
+ * Produces a derangement (no element stays in place) when possible.
+ */
+function generateFullPermutation(segmentCount: number): SwapPair[] {
+  // Build a derangement: random permutation where no element maps to itself
+  const perm = Array.from({ length: segmentCount }, (_, i) => i);
+
+  // Sattolo's algorithm for derangement
+  for (let i = segmentCount - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * i); // 0..i-1 (never i itself)
+    [perm[i], perm[j]] = [perm[j], perm[i]];
+  }
+
+  // Decompose permutation cycles into swap pairs
+  const visited = new Set<number>();
+  const pairs: SwapPair[] = [];
+
+  for (let start = 0; start < segmentCount; start++) {
+    if (visited.has(start) || perm[start] === start) continue;
+
+    // Extract cycle
+    const cycle: number[] = [];
+    let cur = start;
+    while (!visited.has(cur)) {
+      visited.add(cur);
+      cycle.push(cur);
+      cur = perm[cur];
+    }
+
+    // Decompose cycle into adjacent transpositions:
+    // cycle (a, b, c, d) = swap(a,d), swap(a,c), swap(a,b)
+    for (let i = cycle.length - 1; i >= 1; i--) {
+      pairs.push([cycle[0], cycle[i]]);
+    }
+  }
+
+  return pairs;
+}
+
+/**
  * Compile the full shuffle plan: pre-compute all swap pairs, segment lifecycles,
  * flight legs, and per-layer data for the entire sequence.
  */
@@ -103,7 +144,12 @@ export function compilePlan(
   // Generate all swap pairs for all layers
   const swapsByLayer: SwapPair[][] = [[]]; // layer 0 has no swaps
   for (let layer = 1; layer <= maxGen; layer++) {
-    swapsByLayer.push(generateSwapPairs(layer, maxGen, segments));
+    if (layer >= config.animationStartLayer) {
+      // Non-instant layers: full random permutation of all segments
+      swapsByLayer.push(generateFullPermutation(count));
+    } else {
+      swapsByLayer.push(generateSwapPairs(layer, maxGen, segments));
+    }
   }
 
   // Build slot-to-segment mappings for each layer

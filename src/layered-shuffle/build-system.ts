@@ -65,6 +65,10 @@ export class BuildSystem {
   private pairStaggerOffsets: number[] = [];
   /** Swap pair segment ID groups for staggered flash: [segIdA, segIdB][] */
   private staggeredPairs: [number, number][] = [];
+  /** Whether the current layer has already completed its flash phase */
+  private flashDoneForLayer = false;
+  /** Pre-collapse flash timer */
+  private preCollapseTimer = 0;
 
   constructor(plan: CompiledPlan, config: ShuffleConfig) {
     this.plan = plan;
@@ -89,6 +93,8 @@ export class BuildSystem {
       flightStaggerOffsets: new Map<number, number>(),
       pairStaggerOffsets: [],
       staggeredPairs: [],
+      flashDoneForLayer: false,
+      preCollapseTimer: 0,
       state: { currentLayer: 1, phase: "flight" as BuildPhase, phaseTime: 0 },
     });
   }
@@ -120,6 +126,9 @@ export class BuildSystem {
       case "holding":
         this.updateHolding(deltaTime);
         return;
+      case "preCollapse":
+        this.updatePreCollapse(deltaTime);
+        return;
       case "complete":
       case "idle":
         return;
@@ -132,18 +141,26 @@ export class BuildSystem {
   }
 
   private updateFlight(dt: number): void {
+    const layer = this.state.currentLayer;
+    const hasSettleLegs = (this.plan.legsByLayer[layer] ?? []).some(
+      (leg) => leg.mode === "settle",
+    );
+    const hasSwaps = (this.plan.swapsByLayer[layer] ?? []).length > 0;
+
     // Instant layers: use flash → swipe transition if there are settle legs, otherwise commit
     if (this.isInstantLayer()) {
-      const layer = this.state.currentLayer;
-      const hasSettleLegs = (this.plan.legsByLayer[layer] ?? []).some(
-        (leg) => leg.mode === "settle",
-      );
       if (hasSettleLegs) {
         this.startStaggeredFlash();
       } else {
         this.state.phase = "commit";
         this.state.phaseTime = 0;
       }
+      return;
+    }
+
+    // Non-instant layers: show flash before flight (once per layer)
+    if (!this.flashDoneForLayer && hasSwaps && this.config.flashCount > 0) {
+      this.startStaggeredFlash();
       return;
     }
 
@@ -215,6 +232,11 @@ export class BuildSystem {
     const flashDur = this.getFlashDuration();
     if (localTime < flashDur) return { phase: "flash", localTime };
 
+    // Non-instant layers: flash only (no swipe), flight handles movement
+    if (!this.isInstantLayer()) {
+      return { phase: "done", localTime: 0 };
+    }
+
     const swipeLocal = localTime - flashDur;
     if (swipeLocal < this.config.flightDuration) return { phase: "swipe", localTime: swipeLocal };
 
@@ -233,8 +255,17 @@ export class BuildSystem {
         this.staggeredPairs = [];
         this.pairStaggerOffsets = [];
         this.flashSegIds.clear();
-        this.state.phase = "hold";
-        this.state.phaseTime = 0;
+
+        if (this.isInstantLayer()) {
+          // Instant layers: flash includes swipe, go to hold
+          this.state.phase = "hold";
+          this.state.phaseTime = 0;
+        } else {
+          // Non-instant layers: flash done, proceed to flight
+          this.flashDoneForLayer = true;
+          this.state.phase = "flight";
+          this.state.phaseTime = 0;
+        }
       }
       return;
     }
@@ -307,10 +338,10 @@ export class BuildSystem {
 
     // Advance to next layer or complete
     if (layer >= this.config.maxGenerations) {
-      this.state.phase = "complete";
-      this.startCollapse();
+      this.startPreCollapse();
     } else {
       this.state.currentLayer = layer + 1;
+      this.flashDoneForLayer = false;
       if (this.config.buildStagger > 0) {
         this.buildStaggerTimer = this.config.buildStagger;
         this.state.phase = "buildStagger";
@@ -320,6 +351,60 @@ export class BuildSystem {
         this.state.phaseTime = 0;
       }
     }
+  }
+
+  /** Start pre-collapse phase: flash all settled segments while camera moves */
+  private startPreCollapse(): void {
+    this.state.phase = "preCollapse";
+    this.state.phaseTime = 0;
+    this.preCollapseTimer = 0;
+  }
+
+  /** Total duration of pre-collapse phase: flash cycles + hold for camera movement */
+  private getPreCollapseDuration(): number {
+    const flashDur = this.config.flashCount *
+      (this.config.flashOnDuration + this.config.flashOffDuration);
+    // Allow at least holdAfterComplete for camera to finish moving
+    return Math.max(flashDur, this.config.holdAfterComplete);
+  }
+
+  private updatePreCollapse(dt: number): void {
+    this.preCollapseTimer += dt;
+    if (this.preCollapseTimer >= this.getPreCollapseDuration()) {
+      this.startCollapse();
+    }
+  }
+
+  /** Get pre-collapse flash instances: all settled segments as bbox outlines */
+  getPreCollapseFlashInstances(): SegmentInstance[] {
+    const flashDur = this.config.flashCount *
+      (this.config.flashOnDuration + this.config.flashOffDuration);
+
+    // After flash cycles end, show nothing (just camera moving)
+    if (this.preCollapseTimer >= flashDur) return [];
+
+    // Determine flash on/off
+    const cycleDuration = this.config.flashOnDuration + this.config.flashOffDuration;
+    const cyclePos = this.preCollapseTimer % cycleDuration;
+    const isVisible = cyclePos < this.config.flashOnDuration;
+    if (!isVisible) return [];
+
+    // Emit bbox outlines for all settled segments at their positions
+    const instances: SegmentInstance[] = [];
+    for (const s of this.settled) {
+      instances.push({
+        segId: s.segId,
+        x: s.x,
+        y: s.y,
+        z: s.z,
+        w: s.w,
+        h: s.h,
+        wipeRole: 0,
+        isBboxOutline: 1,
+        swipeProgress: 0,
+      });
+    }
+    return instances;
   }
 
   private startCollapse(): void {
@@ -410,6 +495,10 @@ export class BuildSystem {
       return this.getCollapseInstances();
     }
 
+    if (phase === "preCollapse") {
+      return this.getPreCollapseFlashInstances();
+    }
+
     if (phase === "complete" || phase === "holding" || phase === "idle" || phase === "buildStagger") {
       return [];
     }
@@ -425,11 +514,14 @@ export class BuildSystem {
     }
 
     const instances: SegmentInstance[] = [];
+    // Non-instant layers: segments may be re-shuffled after initial settle,
+    // so don't skip them based on settled state
+    const skipSettledCheck = !this.isInstantLayer();
     const settledIds = new Set<number>();
-
-    // Collect all already-settled segment IDs
-    for (const s of this.settled) {
-      settledIds.add(s.segId);
+    if (!skipSettledCheck) {
+      for (const s of this.settled) {
+        settledIds.add(s.segId);
+      }
     }
 
     // All legs for the current layer
@@ -459,8 +551,13 @@ export class BuildSystem {
     const legs = this.plan.legsByLayer[layer] ?? [];
     const prevMapping = this.plan.mappingByLayer[layer - 1];
     const currMapping = this.plan.mappingByLayer[layer];
+    // Non-instant layers: flash happens before commit, so ignore settled state
+    // (segments may have settled in earlier layers but are being re-shuffled)
+    const skipSettledCheck = !this.isInstantLayer();
     const settledIds = new Set<number>();
-    for (const s of this.settled) settledIds.add(s.segId);
+    if (!skipSettledCheck) {
+      for (const s of this.settled) settledIds.add(s.segId);
+    }
 
     // Build segId → leg lookup
     const legBySegId = new Map<number, SegmentLeg>();

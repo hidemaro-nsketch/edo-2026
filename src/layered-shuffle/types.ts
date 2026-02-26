@@ -97,6 +97,7 @@ export type BuildPhase =
   | "buildStagger"  // delay between consecutive layer builds
   | "commit"        // settling segments, advancing to next layer
   | "complete"      // all layers built
+  | "preCollapse"   // flash all settled segments while camera moves to oblique
   | "collapsing"    // collapse animation
   | "holding"       // pause after collapse before restart
   | "idle";         // not started
