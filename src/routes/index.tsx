@@ -398,7 +398,7 @@ function Scene() {
 			try {
 				const loader = new TextureLoader();
 				const bgTex = await loader.loadAsync(
-					`${SAKURA_BASE_PATH}/kimono_bg.png`,
+					`${SAKURA_BASE_PATH}/kimono_bg_inv.png`,
 				);
 				if (disposed) return;
 				bgTex.colorSpace = SRGBColorSpace;
@@ -468,7 +468,11 @@ function Scene() {
 function App() {
 	return (
 		<div className="h-[calc(100vh-72px)] min-h-[520px]">
-			<Canvas camera={{ position: [0, 0, 7], fov: 44 }}>
+			<Canvas
+				orthographic
+				camera={{ position: [0, 0, 2], zoom: 200, near: 0.1, far: 100 }}
+			>
+				<color attach="background" args={["black"]} />
 				<Scene />
 			</Canvas>
 		</div>

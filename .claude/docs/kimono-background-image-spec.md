@@ -8,7 +8,7 @@
 | **Format** | PNG or JPG | PNG for lossless quality; JPG for smaller file size (~60-70% quality is fine) |
 | **Color space** | sRGB | Standard web color space |
 | **Aspect ratio** | 1:1 (square) | Will be mapped to world coords (8.4 x 5.2), so visible area may crop top/bottom |
-| **File location** | `public/sakura/kimono_bg.png` (or `.jpg`) | Alongside existing atlas |
+| **File location** | `public/sakura/kimono_bg_inv.png` (or `.jpg`) | Alongside existing atlas |
 
 ## Important Notes
 

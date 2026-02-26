@@ -28,20 +28,20 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.178711,
-        0.031738,
-        0.02832,
-        0.023438
+        0.077637,
+        0.275391,
+        0.030762,
+        0.026855
       ],
       "pixelRect": [
-        366,
-        65,
-        58,
-        48
+        159,
+        564,
+        63,
+        55
       ],
       "trimmedSize": [
-        58,
-        48
+        63,
+        55
       ],
       "originalSize": [
         1042,
@@ -52,10 +52,10 @@
         0.5
       ],
       "bboxInSource": [
-        253,
-        193,
-        58,
-        48
+        202,
+        231,
+        63,
+        55
       ]
     },
     {
@@ -65,20 +65,20 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.0,
-        0.064941,
-        0.032715,
-        0.024414
+        0.108887,
+        0.166016,
+        0.029785,
+        0.026367
       ],
       "pixelRect": [
-        0,
-        133,
-        67,
-        50
+        223,
+        340,
+        61,
+        54
       ],
       "trimmedSize": [
-        67,
-        50
+        61,
+        54
       ],
       "originalSize": [
         1042,
@@ -89,10 +89,10 @@
         0.5
       ],
       "bboxInSource": [
-        198,
-        234,
-        67,
-        50
+        251,
+        190,
+        61,
+        54
       ]
     },
     {
@@ -102,20 +102,20 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.07373,
-        0.0,
-        0.033691,
-        0.029297
+        0.116699,
+        0.09375,
+        0.03418,
+        0.029785
       ],
       "pixelRect": [
-        151,
-        0,
-        69,
-        60
+        239,
+        192,
+        70,
+        61
       ],
       "trimmedSize": [
-        69,
-        60
+        70,
+        61
       ],
       "originalSize": [
         1042,
@@ -126,10 +126,10 @@
         0.5
       ],
       "bboxInSource": [
-        180,
-        310,
-        69,
-        60
+        182,
+        309,
+        70,
+        61
       ]
     },
     {
@@ -139,20 +139,20 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.147949,
+        0.120117,
         0.0,
-        0.026855,
-        0.029785
+        0.03125,
+        0.032227
       ],
       "pixelRect": [
-        303,
+        246,
         0,
-        55,
-        61
+        64,
+        66
       ],
       "trimmedSize": [
-        55,
-        61
+        64,
+        66
       ],
       "originalSize": [
         1042,
@@ -163,10 +163,10 @@
         0.5
       ],
       "bboxInSource": [
-        316,
-        224,
-        55,
-        61
+        312,
+        220,
+        64,
+        66
       ]
     },
     {
@@ -176,20 +176,20 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.07373,
+        0.116699,
+        0.058594,
         0.033203,
-        0.030273,
-        0.029297
+        0.03125
       ],
       "pixelRect": [
-        151,
+        239,
+        120,
         68,
-        62,
-        60
+        64
       ],
       "trimmedSize": [
-        62,
-        60
+        68,
+        64
       ],
       "originalSize": [
         1042,
@@ -200,10 +200,10 @@
         0.5
       ],
       "bboxInSource": [
-        272,
-        269,
-        62,
-        60
+        268,
+        266,
+        68,
+        64
       ]
     },
     {
@@ -213,19 +213,19 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.111328,
         0.0,
-        0.032715,
+        0.47168,
+        0.032227,
         0.029785
       ],
       "pixelRect": [
-        228,
         0,
-        67,
+        966,
+        66,
         61
       ],
       "trimmedSize": [
-        67,
+        66,
         61
       ],
       "originalSize": [
@@ -238,8 +238,8 @@
       ],
       "bboxInSource": [
         362,
-        302,
-        67,
+        300,
+        66,
         61
       ]
     },
@@ -250,20 +250,20 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.037598,
-        0.0,
-        0.032227,
-        0.030762
+        0.074707,
+        0.335938,
+        0.031738,
+        0.027344
       ],
       "pixelRect": [
-        77,
-        0,
-        66,
-        63
+        153,
+        688,
+        65,
+        56
       ],
       "trimmedSize": [
-        66,
-        63
+        65,
+        56
       ],
       "originalSize": [
         1042,
@@ -274,10 +274,10 @@
         0.5
       ],
       "bboxInSource": [
-        345,
-        376,
-        66,
-        63
+        426,
+        261,
+        65,
+        56
       ]
     },
     {
@@ -287,20 +287,20 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.037598,
-        0.034668,
-        0.028809,
-        0.02832
+        0.153809,
+        0.036133,
+        0.032227,
+        0.030762
       ],
       "pixelRect": [
-        77,
-        71,
-        59,
-        58
+        315,
+        74,
+        66,
+        63
       ],
       "trimmedSize": [
-        59,
-        58
+        66,
+        63
       ],
       "originalSize": [
         1042,
@@ -311,10 +311,10 @@
         0.5
       ],
       "bboxInSource": [
-        358,
-        431,
-        59,
-        58
+        347,
+        377,
+        66,
+        63
       ]
     },
     {
@@ -324,20 +324,20 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.210938,
+        0.155273,
         0.0,
-        0.028809,
-        0.027344
+        0.033691,
+        0.028809
       ],
       "pixelRect": [
-        432,
+        318,
         0,
-        59,
-        56
+        69,
+        59
       ],
       "trimmedSize": [
-        59,
-        56
+        69,
+        59
       ],
       "originalSize": [
         1042,
@@ -348,10 +348,10 @@
         0.5
       ],
       "bboxInSource": [
-        430,
-        260,
-        59,
-        56
+        353,
+        431,
+        69,
+        59
       ]
     },
     {
@@ -361,20 +361,20 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.280273,
-        0.0,
-        0.029785,
-        0.025391
+        0.105957,
+        0.131348,
+        0.03418,
+        0.030762
       ],
       "pixelRect": [
-        574,
-        0,
-        61,
-        52
+        217,
+        269,
+        70,
+        63
       ],
       "trimmedSize": [
-        61,
-        52
+        70,
+        63
       ],
       "originalSize": [
         1042,
@@ -385,10 +385,10 @@
         0.5
       ],
       "bboxInSource": [
-        454,
-        304,
-        61,
-        52
+        428,
+        377,
+        70,
+        63
       ]
     },
     {
@@ -399,19 +399,19 @@
       "atlasPage": 0,
       "uvRect": [
         0.0,
-        0.0,
-        0.033691,
-        0.032227
+        0.505371,
+        0.032715,
+        0.028809
       ],
       "pixelRect": [
         0,
-        0,
-        69,
-        66
+        1035,
+        67,
+        59
       ],
       "trimmedSize": [
-        69,
-        66
+        67,
+        59
       ],
       "originalSize": [
         1042,
@@ -422,10 +422,10 @@
         0.5
       ],
       "bboxInSource": [
-        429,
-        372,
-        69,
-        66
+        452,
+        301,
+        67,
+        59
       ]
     },
     {
@@ -435,20 +435,760 @@
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.178711,
-        0.0,
-        0.02832,
-        0.027832
+        0.074219,
+        0.402344,
+        0.032227,
+        0.027344
       ],
       "pixelRect": [
-        366,
-        0,
-        58,
-        57
+        152,
+        824,
+        66,
+        56
       ],
       "trimmedSize": [
-        58,
-        57
+        66,
+        56
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        508,
+        255,
+        66,
+        56
+      ]
+    },
+    {
+      "id": 12,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.040527,
+        0.436523,
+        0.03125,
+        0.028809
+      ],
+      "pixelRect": [
+        83,
+        894,
+        64,
+        59
+      ],
+      "trimmedSize": [
+        64,
+        59
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        584,
+        216,
+        64,
+        59
+      ]
+    },
+    {
+      "id": 13,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.036133,
+        0.47168,
+        0.032715,
+        0.028809
+      ],
+      "pixelRect": [
+        74,
+        966,
+        67,
+        59
+      ],
+      "trimmedSize": [
+        67,
+        59
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        527,
+        316,
+        67,
+        59
+      ]
+    },
+    {
+      "id": 14,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.040527,
+        0.402344,
+        0.029785,
+        0.030273
+      ],
+      "pixelRect": [
+        83,
+        824,
+        61,
+        62
+      ],
+      "trimmedSize": [
+        61,
+        62
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        624,
+        276,
+        61,
+        62
+      ]
+    },
+    {
+      "id": 15,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.095215,
+        0.225586,
+        0.030273,
+        0.026855
+      ],
+      "pixelRect": [
+        195,
+        462,
+        62,
+        55
+      ],
+      "trimmedSize": [
+        62,
+        55
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        625,
+        335,
+        62,
+        55
+      ]
+    },
+    {
+      "id": 16,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.074707,
+        0.367188,
+        0.032227,
+        0.025879
+      ],
+      "pixelRect": [
+        153,
+        752,
+        66,
+        53
+      ],
+      "trimmedSize": [
+        66,
+        53
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        667,
+        236,
+        66,
+        53
+      ]
+    },
+    {
+      "id": 17,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.037109,
+        0.151367,
+        0.032227,
+        0.074219
+      ],
+      "pixelRect": [
+        76,
+        310,
+        66,
+        152
+      ],
+      "trimmedSize": [
+        66,
+        152
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        182,
+        310,
+        66,
+        152
+      ]
+    },
+    {
+      "id": 18,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.0,
+        0.038574,
+        0.084473
+      ],
+      "pixelRect": [
+        0,
+        0,
+        79,
+        173
+      ],
+      "trimmedSize": [
+        79,
+        173
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        268,
+        259,
+        79,
+        173
+      ]
+    },
+    {
+      "id": 19,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.418945,
+        0.036621,
+        0.048828
+      ],
+      "pixelRect": [
+        0,
+        858,
+        75,
+        100
+      ],
+      "trimmedSize": [
+        75,
+        100
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        236,
+        185,
+        75,
+        100
+      ]
+    },
+    {
+      "id": 20,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.078613,
+        0.0,
+        0.037598,
+        0.054688
+      ],
+      "pixelRect": [
+        161,
+        0,
+        77,
+        112
+      ],
+      "trimmedSize": [
+        77,
+        112
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        183,
+        234,
+        77,
+        112
+      ]
+    },
+    {
+      "id": 21,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.055664,
+        0.085938,
+        0.057129,
+        0.041504
+      ],
+      "pixelRect": [
+        114,
+        176,
+        117,
+        85
+      ],
+      "trimmedSize": [
+        117,
+        85
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        297,
+        210,
+        117,
+        85
+      ]
+    },
+    {
+      "id": 22,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.073242,
+        0.182129,
+        0.031738,
+        0.039551
+      ],
+      "pixelRect": [
+        150,
+        373,
+        65,
+        81
+      ],
+      "trimmedSize": [
+        65,
+        81
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        384,
+        254,
+        65,
+        81
+      ]
+    },
+    {
+      "id": 23,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.286133,
+        0.036621,
+        0.064941
+      ],
+      "pixelRect": [
+        0,
+        586,
+        75,
+        133
+      ],
+      "trimmedSize": [
+        75,
+        133
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        671,
+        222,
+        75,
+        133
+      ]
+    },
+    {
+      "id": 24,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.040527,
+        0.286133,
+        0.033203,
+        0.045898
+      ],
+      "pixelRect": [
+        83,
+        586,
+        68,
+        94
+      ],
+      "trimmedSize": [
+        68,
+        94
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        356,
+        304,
+        68,
+        94
+      ]
+    },
+    {
+      "id": 25,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.04248,
+        0.0,
+        0.032227,
+        0.082031
+      ],
+      "pixelRect": [
+        87,
+        0,
+        66,
+        168
+      ],
+      "trimmedSize": [
+        66,
+        168
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        351,
+        381,
+        66,
+        168
+      ]
+    },
+    {
+      "id": 26,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.057617,
+        0.229492,
+        0.033691,
+        0.041992
+      ],
+      "pixelRect": [
+        118,
+        470,
+        69,
+        86
+      ],
+      "trimmedSize": [
+        69,
+        86
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        443,
+        303,
+        69,
+        86
+      ]
+    },
+    {
+      "id": 27,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.35498,
+        0.029785,
+        0.060059
+      ],
+      "pixelRect": [
+        0,
+        727,
+        61,
+        123
+      ],
+      "trimmedSize": [
+        61,
+        123
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        434,
+        375,
+        61,
+        123
+      ]
+    },
+    {
+      "id": 28,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.151367,
+        0.033203,
+        0.078125
+      ],
+      "pixelRect": [
+        0,
+        310,
+        68,
+        160
+      ],
+      "trimmedSize": [
+        68,
+        160
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        614,
+        275,
+        68,
+        160
+      ]
+    },
+    {
+      "id": 29,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.233398,
+        0.053711,
+        0.048828
+      ],
+      "pixelRect": [
+        0,
+        478,
+        110,
+        100
+      ],
+      "trimmedSize": [
+        110,
+        100
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        552,
+        207,
+        110,
+        100
+      ]
+    },
+    {
+      "id": 30,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.073242,
+        0.131348,
+        0.028809,
+        0.046875
+      ],
+      "pixelRect": [
+        150,
+        269,
+        59,
+        96
+      ],
+      "trimmedSize": [
+        59,
+        96
+      ],
+      "originalSize": [
+        1042,
+        1042
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        531,
+        318,
+        59,
+        96
+      ]
+    },
+    {
+      "id": 31,
+      "sourceImageId": "花陽ひいなかた-2",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.033691,
+        0.35498,
+        0.037109,
+        0.043457
+      ],
+      "pixelRect": [
+        69,
+        727,
+        76,
+        89
+      ],
+      "trimmedSize": [
+        76,
+        89
       ],
       "originalSize": [
         1042,
@@ -460,32 +1200,32 @@
       ],
       "bboxInSource": [
         512,
-        251,
-        58,
-        57
+        246,
+        76,
+        89
       ]
     },
     {
-      "id": 12,
+      "id": 32,
       "sourceImageId": "花陽ひいなかた-2",
       "categoryId": 0,
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
         0.0,
-        0.036133,
-        0.032227,
-        0.024902
+        0.088379,
+        0.051758,
+        0.059082
       ],
       "pixelRect": [
         0,
-        74,
-        66,
-        51
+        181,
+        106,
+        121
       ],
       "trimmedSize": [
-        66,
-        51
+        106,
+        121
       ],
       "originalSize": [
         1042,
@@ -496,158 +1236,10 @@
         0.5
       ],
       "bboxInSource": [
-        529,
-        321,
-        66,
-        51
-      ]
-    },
-    {
-      "id": 13,
-      "sourceImageId": "花陽ひいなかた-2",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.210938,
-        0.03125,
-        0.027832,
-        0.026367
-      ],
-      "pixelRect": [
-        432,
-        64,
-        57,
-        54
-      ],
-      "trimmedSize": [
-        57,
-        54
-      ],
-      "originalSize": [
-        1042,
-        1042
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        586,
-        218,
-        57,
-        54
-      ]
-    },
-    {
-      "id": 14,
-      "sourceImageId": "花陽ひいなかた-2",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.10791,
-        0.033691,
-        0.030762,
-        0.023438
-      ],
-      "pixelRect": [
-        221,
-        69,
-        63,
-        48
-      ],
-      "trimmedSize": [
-        63,
-        48
-      ],
-      "originalSize": [
-        1042,
-        1042
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        621,
-        284,
-        63,
-        48
-      ]
-    },
-    {
-      "id": 15,
-      "sourceImageId": "花陽ひいなかた-2",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.243652,
-        0.027344,
-        0.027344,
-        0.026855
-      ],
-      "pixelRect": [
-        499,
-        56,
-        56,
-        55
-      ],
-      "trimmedSize": [
-        56,
-        55
-      ],
-      "originalSize": [
-        1042,
-        1042
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        629,
-        334,
-        56,
-        55
-      ]
-    },
-    {
-      "id": 16,
-      "sourceImageId": "花陽ひいなかた-2",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.243652,
-        0.0,
-        0.032715,
-        0.023438
-      ],
-      "pixelRect": [
-        499,
-        0,
-        67,
-        48
-      ],
-      "trimmedSize": [
-        67,
-        48
-      ],
-      "originalSize": [
-        1042,
-        1042
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        669,
-        242,
-        67,
-        48
+        484,
+        341,
+        106,
+        121
       ]
     }
   ]

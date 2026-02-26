@@ -1,11 +1,15 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useRef } from "react";
-import { Vector3, MathUtils } from "three";
+import { Vector3, MathUtils, OrthographicCamera } from "three";
 
 // Module-level constants to avoid per-frame allocation
-const TOP_DOWN_POSITION = new Vector3(0, 0, 7);
+const TOP_DOWN_POSITION = new Vector3(0, 0, 2);
 const OBLIQUE_POSITION = new Vector3(3, 2, 6);
 const TOP_DOWN_LOOK_AT = new Vector3(0, 0, 0);
+
+// Zoom levels for orthographic camera
+const TOP_DOWN_ZOOM = 200;
+const OBLIQUE_ZOOM = 80;
 
 // Damping rate: higher = faster convergence
 const DAMP_RATE = 3;
@@ -21,6 +25,9 @@ type CameraRigProps = {
 /**
  * Automated camera rig that transitions from top-down to oblique view
  * based on the current shuffle generation progress.
+ *
+ * Uses OrthographicCamera so layers at different Z positions
+ * overlap perfectly when viewed top-down.
  *
  * - Gen 0..cameraRevealGen: top-down (looking straight down Z)
  * - Gen cameraRevealGen..maxGenerations: smooth transition to oblique angle
@@ -39,6 +46,7 @@ export function CameraRig({
   const targetLookAt = useRef(new Vector3());
   const currentLookAt = useRef(new Vector3(0, 0, 0));
   const obliqueLookAt = useRef(new Vector3());
+  const currentZoom = useRef(TOP_DOWN_ZOOM);
 
   useFrame((_, delta) => {
     if (!enabled) return;
@@ -67,11 +75,25 @@ export function CameraRig({
       t,
     );
 
+    // Interpolate zoom
+    const targetZoom = MathUtils.lerp(TOP_DOWN_ZOOM, OBLIQUE_ZOOM, t);
+
     // Damped movement toward target for natural feel
     const dampFactor = 1 - Math.exp(-DAMP_RATE * delta);
     camera.position.lerp(targetPos.current, dampFactor);
     currentLookAt.current.lerp(targetLookAt.current, dampFactor);
     camera.lookAt(currentLookAt.current);
+
+    // Update zoom for orthographic camera
+    if (camera instanceof OrthographicCamera) {
+      currentZoom.current = MathUtils.lerp(
+        currentZoom.current,
+        targetZoom,
+        dampFactor,
+      );
+      camera.zoom = currentZoom.current;
+      camera.updateProjectionMatrix();
+    }
   });
 
   return null;
