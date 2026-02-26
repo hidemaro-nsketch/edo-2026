@@ -1,17 +1,14 @@
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
 import { button, useControls } from "leva";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DoubleSide, SRGBColorSpace, type Texture, TextureLoader } from "three";
-import { LayerStack } from "../layered-shuffle/layer-stack";
-import {
-	DEFAULT_CONFIG,
-	type LayerState,
-	type ShuffleConfig,
-} from "../layered-shuffle/types";
+import { BuildSystem } from "../layered-shuffle/build-system";
+import { compilePlan } from "../layered-shuffle/compiled-plan";
+import { DEFAULT_CONFIG, type ShuffleConfig } from "../layered-shuffle/types";
 import { CameraRig } from "../render/CameraRig";
 import { ConnectionLines } from "../render/ConnectionLines";
-import { LayerMesh } from "../render/LayerMesh";
+import { SegmentMeshes } from "../render/SegmentMeshes";
 import { KIMONO_SIZE } from "../sakura/constants";
 import { loadAtlasTextures } from "../sakura/segment-manager";
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
@@ -49,11 +46,9 @@ function useDebugGui(): DebugGuiResult {
 		bgOpacity: { value: 1.0, min: 0, max: 1, step: 0.01 },
 	});
 
-	const generation = useControls("Generation", {
-		shuffleDuration: { value: 2.0, min: 0.5, max: 10, step: 0.5 },
-		switchIntervalMin: { value: 0.2, min: 0.05, max: 2, step: 0.05 },
-		switchIntervalMax: { value: 0.5, min: 0.05, max: 2, step: 0.05 },
-		fadeDuration: { value: 0.6, min: 0.1, max: 3, step: 0.1 },
+	const animation = useControls("Animation", {
+		flightDuration: { value: 0.6, min: 0.1, max: 3, step: 0.1 },
+		holdDuration: { value: 0.3, min: 0, max: 2, step: 0.1 },
 	});
 
 	const layers = useControls("Layers", {
@@ -74,230 +69,7 @@ function useDebugGui(): DebugGuiResult {
 		}),
 	});
 
-	return { ...opacity, ...generation, ...layers, ...collapse, resetTrigger };
-}
-
-// ─── Timing refs type ───────────────────────────────────────────────────────
-
-type TimingRefs = {
-	genStartTime: React.RefObject<number>;
-	nextSwitchTime: React.RefObject<number>;
-	holdStart: React.RefObject<number>;
-};
-
-function resetTimingRefs(refs: TimingRefs): void {
-	refs.genStartTime.current = -1;
-	refs.nextSwitchTime.current = -1;
-	refs.holdStart.current = -1;
-}
-
-// ─── Phase handlers ─────────────────────────────────────────────────────────
-
-function handleHolding(
-	stack: LayerStack,
-	now: number,
-	config: ShuffleConfig,
-	refs: TimingRefs,
-	sync: (stack: LayerStack) => void,
-): void {
-	if (refs.holdStart.current < 0) {
-		refs.holdStart.current = now;
-	}
-	if (now - refs.holdStart.current < config.holdAfterComplete) return;
-
-	stack.reset();
-	stack.initOriginalLayer();
-	resetTimingRefs(refs);
-	sync(stack);
-}
-
-function handleCollapsing(
-	stack: LayerStack,
-	delta: number,
-	syncLayers: (layers: LayerState[]) => void,
-): void {
-	stack.updateCollapse(delta);
-	syncLayers([...stack.getAliveLayers()]);
-}
-
-function handleFrozen(
-	stack: LayerStack,
-	now: number,
-	config: ShuffleConfig,
-	refs: TimingRefs,
-	syncLayers: (layers: LayerState[]) => void,
-	syncGen: (gen: number) => void,
-): void {
-	if (stack.isComplete()) {
-		stack.startCollapse();
-		syncLayers([...stack.getAliveLayers()]);
-		return;
-	}
-
-	stack.startGeneration();
-	refs.genStartTime.current = now;
-	refs.nextSwitchTime.current = now + config.switchIntervalMin;
-	syncGen(stack.currentGen);
-	syncLayers([...stack.getAliveLayers()]);
-}
-
-function handleShuffling(
-	stack: LayerStack,
-	now: number,
-	_segments: SegmentInfo[],
-	config: ShuffleConfig,
-	refs: TimingRefs,
-	syncLayers: (layers: LayerState[]) => void,
-	syncGen: (gen: number) => void,
-	bumpVersion: () => void,
-): void {
-	const elapsed = now - refs.genStartTime.current;
-
-	// Freeze when shuffle duration is exceeded (swaps may already be done)
-	if (elapsed >= config.shuffleDuration) {
-		// Apply all remaining swaps before freezing
-		while (stack.hasSwapsRemaining()) {
-			const pair = stack.popNextSwap();
-			if (pair) stack.applySwap(pair[0], pair[1]);
-		}
-		stack.freezeGeneration();
-		syncLayers([...stack.getAliveLayers()]);
-		syncGen(stack.currentGen);
-		return;
-	}
-
-	// No more swaps to apply — wait for duration to expire
-	if (!stack.hasSwapsRemaining()) return;
-
-	if (now < refs.nextSwitchTime.current) return;
-
-	// Pop next pre-computed swap pair and apply it
-	const pair = stack.popNextSwap();
-	if (pair) {
-		stack.applySwap(pair[0], pair[1]);
-	}
-
-	// Schedule next swap: distribute remaining swaps evenly across remaining time
-	const remainingTime = config.shuffleDuration - elapsed;
-	const remainingSwaps = stack.getSwapQueueLength();
-	const evenInterval = remainingSwaps > 0 ? remainingTime / remainingSwaps : remainingTime;
-	const interval = Math.max(config.switchIntervalMin, Math.min(evenInterval, config.switchIntervalMax));
-	refs.nextSwitchTime.current = now + interval;
-
-	bumpVersion();
-}
-
-// ─── Layered Shuffle Hook ───────────────────────────────────────────────────
-
-type UseLayeredShuffleResult = {
-	renderLayers: LayerState[];
-	currentGen: number;
-};
-
-function useLayeredShuffle(
-	segments: SegmentInfo[],
-	config: ShuffleConfig,
-	resetTrigger: number,
-): UseLayeredShuffleResult {
-	const stackRef = useRef<LayerStack | null>(null);
-	const [aliveLayers, setAliveLayers] = useState<LayerState[]>([]);
-	const [currentGen, setCurrentGen] = useState(0);
-	const [shuffleVersion, setShuffleVersion] = useState(0);
-
-	const genStartTimeRef = useRef(-1);
-	const nextSwitchTimeRef = useRef(-1);
-	const lastResetRef = useRef(0);
-	const holdStartRef = useRef(-1);
-
-	const timingRefs: TimingRefs = {
-		genStartTime: genStartTimeRef,
-		nextSwitchTime: nextSwitchTimeRef,
-		holdStart: holdStartRef,
-	};
-
-	if (!stackRef.current) {
-		stackRef.current = new LayerStack(segments.length, config);
-		stackRef.current.initOriginalLayer();
-	}
-
-	const syncAll = (stack: LayerStack): void => {
-		setAliveLayers(stack.getAliveLayers());
-		setCurrentGen(0);
-	};
-
-	useFrame((_, delta) => {
-		const stack = stackRef.current;
-		if (!stack) return;
-		const now = performance.now() / 1000;
-
-		if (resetTrigger !== lastResetRef.current) {
-			lastResetRef.current = resetTrigger;
-			const newStack = new LayerStack(segments.length, config);
-			newStack.initOriginalLayer();
-			stackRef.current = newStack;
-			resetTimingRefs(timingRefs);
-			syncAll(newStack);
-			return;
-		}
-
-		switch (stack.phase) {
-			case "holding":
-				handleHolding(stack, now, config, timingRefs, syncAll);
-				return;
-			case "collapsing":
-				handleCollapsing(stack, delta, setAliveLayers);
-				return;
-			case "frozen":
-				handleFrozen(
-					stack,
-					now,
-					config,
-					timingRefs,
-					setAliveLayers,
-					setCurrentGen,
-				);
-				return;
-			case "shuffling":
-				handleShuffling(
-					stack,
-					now,
-					segments,
-					config,
-					timingRefs,
-					setAliveLayers,
-					setCurrentGen,
-					() => setShuffleVersion((v) => v + 1),
-				);
-				return;
-		}
-	});
-
-	const renderLayers = useMemo(() => {
-		const stack = stackRef.current;
-		if (!stack) return aliveLayers;
-
-		if (stack.phase === "shuffling") {
-			const pendingMapping = stack.getPendingSlotToSegId();
-			if (pendingMapping.length > 0) {
-				const liveLayer: LayerState = {
-					gen: stack.currentGen,
-					z: stack.currentGen * config.layerSpacing,
-					alive: true,
-					opacity: 1,
-					slotToSegId: pendingMapping,
-					changedSlots: [],
-					linksFromPrev: [],
-				};
-				return [...aliveLayers, liveLayer];
-			}
-		}
-
-		return aliveLayers;
-		// shuffleVersion is needed to recompute live layer during shuffling
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [aliveLayers, config.layerSpacing, shuffleVersion]);
-
-	return { renderLayers, currentGen };
+	return { ...opacity, ...animation, ...layers, ...collapse, resetTrigger };
 }
 
 // ─── KimonoBackground ───────────────────────────────────────────────────────
@@ -308,7 +80,6 @@ function KimonoBackground({
 }: { texture: Texture | null; opacity: number }) {
 	if (!texture) return null;
 
-	// Show only the top half: halve height, shift up by quarter, adjust UV
 	const halfHeight = KIMONO_SIZE / 2;
 	const yOffset = halfHeight / 2;
 
@@ -318,8 +89,6 @@ function KimonoBackground({
 			onUpdate={(mesh) => {
 				const uv = mesh.geometry.getAttribute("uv");
 				if (uv && !(uv as any).__halfAdjusted) {
-					// Default plane UV: bottom-left (0,0) to top-right (1,1)
-					// Remap V from [0,1] to [0.5,1] to show only top half of texture
 					for (let i = 0; i < uv.count; i++) {
 						const v = uv.getY(i);
 						uv.setY(i, 0.5 + v * 0.5);
@@ -340,47 +109,67 @@ function KimonoBackground({
 	);
 }
 
-// ─── LayeredShuffleContent ──────────────────────────────────────────────────
+// ─── ShuffleContent ─────────────────────────────────────────────────────────
 
-type LayeredShuffleContentProps = {
+type ShuffleContentProps = {
 	segments: SegmentInfo[];
 	atlasTexture: Texture;
 	config: ShuffleConfig;
 	resetTrigger: number;
 };
 
-function LayeredShuffleContent({
+function ShuffleContent({
 	segments,
 	atlasTexture,
 	config,
 	resetTrigger,
-}: LayeredShuffleContentProps) {
-	const { renderLayers, currentGen } = useLayeredShuffle(
-		segments,
-		config,
-		resetTrigger,
-	);
+}: ShuffleContentProps) {
+	const systemRef = useRef<BuildSystem | null>(null);
+	const lastResetRef = useRef(0);
+	const [currentLayer, setCurrentLayer] = useState(0);
+
+	// Initialize or reset the build system
+	if (!systemRef.current) {
+		const plan = compilePlan(segments, config);
+		systemRef.current = new BuildSystem(plan, config);
+	}
+
+	// Handle reset
+	if (resetTrigger !== lastResetRef.current) {
+		lastResetRef.current = resetTrigger;
+		const plan = compilePlan(segments, config);
+		systemRef.current = new BuildSystem(plan, config);
+		setCurrentLayer(0);
+	}
+
+	// Handle idle → restart loop
+	const system = systemRef.current;
+	if (system.state.phase === "idle") {
+		const plan = compilePlan(segments, config);
+		system.reset(plan);
+		setCurrentLayer(0);
+	}
+
+	// Track current layer for CameraRig
+	const prevLayerRef = useRef(0);
+	if (system.state.currentLayer !== prevLayerRef.current) {
+		prevLayerRef.current = system.state.currentLayer;
+		setCurrentLayer(system.state.currentLayer);
+	}
 
 	return (
 		<>
 			<CameraRig
-				currentGen={currentGen}
+				currentGen={currentLayer}
 				maxGenerations={config.maxGenerations}
 				layerSpacing={config.layerSpacing}
 			/>
-			{renderLayers.map((layer) => (
-				<LayerMesh
-					key={layer.gen}
-					layer={layer}
-					segments={segments}
-					atlasTexture={atlasTexture}
-				/>
-			))}
-			<ConnectionLines
-				layers={renderLayers}
+			<SegmentMeshes
 				segments={segments}
-				layerSpacing={config.layerSpacing}
+				atlasTexture={atlasTexture}
+				buildSystem={system}
 			/>
+			<ConnectionLines buildSystem={system} />
 		</>
 	);
 }
@@ -451,10 +240,8 @@ function Scene() {
 		() => ({
 			maxGenerations:
 				gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations,
-			shuffleDuration: gui.shuffleDuration,
-			switchIntervalMin: gui.switchIntervalMin,
-			switchIntervalMax: gui.switchIntervalMax,
-			fadeDuration: gui.fadeDuration,
+			flightDuration: gui.flightDuration ?? DEFAULT_CONFIG.flightDuration,
+			holdDuration: gui.holdDuration ?? DEFAULT_CONFIG.holdDuration,
 			layerSpacing: gui.layerSpacing ?? DEFAULT_CONFIG.layerSpacing,
 			collapseDuration:
 				gui.collapseDuration ?? DEFAULT_CONFIG.collapseDuration,
@@ -472,7 +259,7 @@ function Scene() {
 		<>
 			<KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} />
 			{atlasTexture && (
-				<LayeredShuffleContent
+				<ShuffleContent
 					segments={segments}
 					atlasTexture={atlasTexture}
 					config={config}

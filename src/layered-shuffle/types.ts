@@ -2,14 +2,10 @@
 export type ShuffleConfig = {
   /** Maximum number of shuffle generations */
   maxGenerations: number;
-  /** Duration of each generation's shuffle phase in seconds */
-  shuffleDuration: number;
-  /** Minimum interval between individual slot switches in seconds */
-  switchIntervalMin: number;
-  /** Maximum interval between individual slot switches in seconds */
-  switchIntervalMax: number;
-  /** Duration of fade-in/fade-out animations in seconds */
-  fadeDuration: number;
+  /** Duration of flight animation per layer in seconds */
+  flightDuration: number;
+  /** Hold duration after flight before committing layer in seconds */
+  holdDuration: number;
   /** Z distance between adjacent layers */
   layerSpacing: number;
   /** Duration of each layer's fade-out during collapse in seconds */
@@ -20,48 +16,77 @@ export type ShuffleConfig = {
   holdAfterComplete: number;
 };
 
-/** Represents the state of one layer (one generation snapshot) */
-export type LayerState = {
-  /** Generation index: 0 = original, 1..maxGenerations = shuffled */
-  gen: number;
-  /** Z position: gen * layerSpacing */
-  z: number;
-  /** Whether this layer should be rendered */
-  alive: boolean;
-  /** Current opacity for fade animation (0..1) */
-  opacity: number;
-  /** Mapping from slot index to segment ID (length = segmentCount) */
-  slotToSegId: number[];
-  /** Which slots changed compared to the previous layer (length = segmentCount) */
-  changedSlots: boolean[];
-  /** Connection line data linking changed slots to their previous values */
-  linksFromPrev: Array<{
-    /** Which slot changed */
-    slotIndex: number;
-    /** Segment ID shown in the previous layer */
-    prevSegId: number;
-    /** Segment ID shown in this layer */
-    currSegId: number;
-  }>;
-};
-
 /** A pair of slot indices to swap */
 export type SwapPair = [slotA: number, slotB: number];
 
-/** Overall phase of the layered shuffle system */
-export type SystemPhase =
-  | "shuffling"   // actively shuffling current generation
-  | "frozen"      // generation complete, waiting before next
-  | "collapsing"  // layers fading out top-down
-  | "holding";    // pause after collapse, before loop restart
+/** A single flight leg for one segment between two layers */
+export type SegmentLeg = {
+  /** Segment ID */
+  segId: number;
+  /** Layer this leg flies TO */
+  toLayer: number;
+  /** Mode: "pass" = same position, "settle" = new position (swapped) */
+  mode: "pass" | "settle";
+  /** Start position [x, y, z] */
+  from: [number, number, number];
+  /** End position [x, y, z] */
+  to: [number, number, number];
+  /** Start size [w, h] */
+  fromSize: [number, number];
+  /** End size [w, h] (object-fit contained for settle) */
+  toSize: [number, number];
+};
+
+/** Full lifecycle of one segment across all layers */
+export type SegmentLifecycle = {
+  segId: number;
+  /** Layer where this segment first gets swapped (-1 if never) */
+  settleLayer: number;
+  /** Slot index where this segment ends up */
+  finalSlot: number;
+  /** Ordered list of legs (one per layer transition) */
+  legs: SegmentLeg[];
+};
+
+/** Pre-computed plan for the entire shuffle sequence */
+export type CompiledPlan = {
+  /** All segment lifecycles */
+  lifecycles: SegmentLifecycle[];
+  /** Legs grouped by target layer: legsByLayer[layerIdx] = legs flying TO that layer */
+  legsByLayer: SegmentLeg[][];
+  /** Segment IDs that settle at each layer */
+  settleIdsByLayer: number[][];
+  /** Swap pairs per layer (for ConnectionLines) */
+  swapsByLayer: SwapPair[][];
+  /** Slot-to-segment mapping at each layer (after all swaps applied) */
+  mappingByLayer: number[][];
+};
+
+/** Phase of the build state machine */
+export type BuildPhase =
+  | "flight"     // segments flying from prev layer to current
+  | "hold"       // brief pause after flight
+  | "commit"     // settling segments, advancing to next layer
+  | "complete"   // all layers built
+  | "collapsing" // collapse animation
+  | "holding"    // pause after collapse before restart
+  | "idle";      // not started
+
+/** Runtime state for the sequential layer build */
+export type BuildState = {
+  /** Current layer being built (1-based, 0 = base) */
+  currentLayer: number;
+  /** Current phase */
+  phase: BuildPhase;
+  /** Progress within current phase (0..1 for flight, seconds for hold) */
+  phaseTime: number;
+};
 
 /** Default configuration values */
 export const DEFAULT_CONFIG: ShuffleConfig = {
   maxGenerations: 10,
-  shuffleDuration: 2.0,
-  switchIntervalMin: 0.2,
-  switchIntervalMax: 0.5,
-  fadeDuration: 0.6,
+  flightDuration: 0.6,
+  holdDuration: 0.3,
   layerSpacing: 1.0,
   collapseDuration: 0.1,
   collapseStagger: 0.08,

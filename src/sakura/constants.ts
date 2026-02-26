@@ -31,3 +31,22 @@ export function getSlotWorldSize(
 	const bboxH = seg.bboxInSource[3] / seg.originalSize[1];
 	return [bboxW * KIMONO_SIZE, bboxH * KIMONO_SIZE];
 }
+
+/**
+ * Compute contained size for a segment fitting into a slot (object-fit: contain).
+ * Returns [width, height] that fits within slotW x slotH while preserving
+ * the content's aspect ratio.
+ */
+export function computeContainedSize(
+	contentW: number,
+	contentH: number,
+	slotW: number,
+	slotH: number,
+): [number, number] {
+	const contentAspect = contentW / contentH;
+	const slotAspect = slotW / slotH;
+	if (contentAspect > slotAspect) {
+		return [slotW, slotW / contentAspect];
+	}
+	return [slotH * contentAspect, slotH];
+}
