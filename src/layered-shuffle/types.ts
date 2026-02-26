@@ -88,7 +88,7 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
   flightDuration: 0.6,
   holdDuration: 0.3,
   layerSpacing: 1.0,
-  collapseDuration: 0.1,
+  collapseDuration: 0.2,
   collapseStagger: 0.08,
   holdAfterComplete: 1.0,
 };

@@ -27,15 +27,12 @@ export class BuildSystem {
 
   state: BuildState;
 
-  /** Segments that have settled (append-only) */
+  /** Segments that have settled (append-only during build) */
   private settled: SegmentInstance[] = [];
-  /** Collapse animation state */
-  private collapsingIndex = -1;
+  /** Collapse: current layer being reverse-played */
+  private collapsingLayer = -1;
   private collapseTimer = 0;
   private staggerTimer = 0;
-  private collapseOriginalZ: Map<number, number> = new Map();
-  /** Settled segment opacity during collapse */
-  settledOpacity: Map<number, number> = new Map();
 
   constructor(plan: CompiledPlan, config: ShuffleConfig) {
     this.plan = plan;
@@ -49,11 +46,9 @@ export class BuildSystem {
     Object.assign(this, {
       plan,
       settled: [],
-      collapsingIndex: -1,
+      collapsingLayer: -1,
       collapseTimer: 0,
       staggerTimer: 0,
-      collapseOriginalZ: new Map(),
-      settledOpacity: new Map(),
       state: { currentLayer: 1, phase: "flight" as BuildPhase, phaseTime: 0 },
     });
   }
@@ -129,23 +124,15 @@ export class BuildSystem {
 
   private startCollapse(): void {
     this.state.phase = "collapsing";
-    // Collapse from highest layer settled segments downward
-    const maxLayer = this.config.maxGenerations;
-    this.collapsingIndex = maxLayer;
+    this.collapsingLayer = this.config.maxGenerations;
     this.collapseTimer = 0;
     this.staggerTimer = 0;
-
-    // Snapshot Z positions for collapse
-    this.collapseOriginalZ = new Map();
-    this.settledOpacity = new Map();
-    for (const s of this.settled) {
-      this.collapseOriginalZ.set(s.segId, s.z);
-      this.settledOpacity.set(s.segId, 1);
-    }
+    // Clear settled — collapse uses legs for reverse-flight rendering
+    this.settled = [];
   }
 
   private updateCollapse(dt: number): void {
-    if (this.collapsingIndex <= 0) {
+    if (this.collapsingLayer <= 0) {
       this.state.phase = "holding";
       this.state.phaseTime = 0;
       return;
@@ -157,34 +144,9 @@ export class BuildSystem {
     }
 
     this.collapseTimer += dt;
-    const progress = Math.min(this.collapseTimer / this.config.collapseDuration, 1);
-    const eased = 1 - (1 - progress) * (1 - progress);
-
-    const targetZ = (this.collapsingIndex - 1) * this.config.layerSpacing;
-
-    // Animate all settled segments at this layer
-    for (const s of this.settled) {
-      const origZ = this.collapseOriginalZ.get(s.segId);
-      if (origZ === undefined) continue;
-      const segLayer = Math.round(origZ / this.config.layerSpacing);
-      if (segLayer !== this.collapsingIndex) continue;
-
-      s.z = origZ + (targetZ - origZ) * eased;
-      const opacity = progress < 0.5 ? 1 : 1 - (progress - 0.5) * 2;
-      this.settledOpacity.set(s.segId, opacity);
-    }
-
-    if (progress >= 1) {
-      // Remove collapsed segments
-      this.settled = this.settled.filter((s) => {
-        const origZ = this.collapseOriginalZ.get(s.segId);
-        if (origZ === undefined) return true;
-        const segLayer = Math.round(origZ / this.config.layerSpacing);
-        return segLayer !== this.collapsingIndex;
-      });
-
-      this.collapsingIndex -= 1;
-      if (this.collapsingIndex <= 0) {
+    if (this.collapseTimer >= this.config.collapseDuration) {
+      this.collapsingLayer -= 1;
+      if (this.collapsingLayer <= 0) {
         this.state.phase = "holding";
         this.state.phaseTime = 0;
       } else {
@@ -219,7 +181,11 @@ export class BuildSystem {
   getActiveInstances(): SegmentInstance[] {
     const { currentLayer, phase, phaseTime } = this.state;
 
-    if (phase === "complete" || phase === "collapsing" || phase === "holding" || phase === "idle") {
+    if (phase === "collapsing") {
+      return this.getCollapseInstances();
+    }
+
+    if (phase === "complete" || phase === "holding" || phase === "idle") {
       return [];
     }
 
@@ -246,7 +212,40 @@ export class BuildSystem {
     return instances;
   }
 
-  /** Get all settled segment instances */
+  /** Get reverse-flying instances during collapse */
+  private getCollapseInstances(): SegmentInstance[] {
+    const instances: SegmentInstance[] = [];
+    const progress = Math.min(this.collapseTimer / this.config.collapseDuration, 1);
+    const eased = easeOutCubic(progress);
+
+    // Current collapsing layer: reverse-fly legs (to → from)
+    const legs = this.plan.legsByLayer[this.collapsingLayer] ?? [];
+    for (const leg of legs) {
+      instances.push(interpolateLegReverse(leg, eased));
+    }
+
+    // Already-collapsed layers (above collapsingLayer): show at from position (layer 0 side)
+    // These have already reverse-flown back, so they're gone (not rendered)
+
+    // Layers below collapsingLayer that haven't collapsed yet: show at settled (to) position
+    for (let layer = this.collapsingLayer - 1; layer >= 1; layer--) {
+      const layerLegs = this.plan.legsByLayer[layer] ?? [];
+      for (const leg of layerLegs) {
+        instances.push({
+          segId: leg.segId,
+          x: leg.to[0],
+          y: leg.to[1],
+          z: leg.to[2],
+          w: leg.toSize[0],
+          h: leg.toSize[1],
+        });
+      }
+    }
+
+    return instances;
+  }
+
+  /** Get all settled segment instances (empty during collapse — handled by getActiveInstances) */
   getSettledInstances(): SegmentInstance[] {
     return this.settled;
   }
@@ -261,11 +260,17 @@ export class BuildSystem {
     const lines: Array<{ from: [number, number, number]; to: [number, number, number] }> = [];
     const { currentLayer, phase, phaseTime } = this.state;
 
-    const maxBuiltLayer = phase === "flight" || phase === "hold"
+    if (phase === "collapsing") {
+      return this.getCollapseLines();
+    }
+
+    if (phase === "holding" || phase === "idle") {
+      return [];
+    }
+
+    const maxBuiltLayer = phase === "flight" || phase === "hold" || phase === "commit"
       ? currentLayer
-      : phase === "commit"
-        ? currentLayer
-        : this.config.maxGenerations;
+      : this.config.maxGenerations;
 
     const t = phase === "flight"
       ? easeOutCubic(Math.min(phaseTime / this.config.flightDuration, 1))
@@ -276,21 +281,52 @@ export class BuildSystem {
       const isCurrentLayer = layer === currentLayer && (phase === "flight" || phase === "hold");
 
       for (const leg of legs) {
-        if (leg.mode === "pass") continue; // only draw lines for settle legs
+        if (leg.mode === "pass") continue;
 
         if (isCurrentLayer) {
-          // Animated line endpoint
           const inst = interpolateLeg(leg, t);
           lines.push({
             from: leg.from,
             to: [inst.x, inst.y, inst.z],
           });
-        } else if (layer < currentLayer || phase === "complete" || phase === "collapsing" || phase === "holding") {
+        } else if (layer < currentLayer || phase === "complete") {
           lines.push({
             from: leg.from,
             to: leg.to,
           });
         }
+      }
+    }
+
+    return lines;
+  }
+
+  /** Get connection lines during collapse (reverse animation) */
+  private getCollapseLines(): Array<{ from: [number, number, number]; to: [number, number, number] }> {
+    const lines: Array<{ from: [number, number, number]; to: [number, number, number] }> = [];
+    const progress = Math.min(this.collapseTimer / this.config.collapseDuration, 1);
+    const t = easeOutCubic(progress);
+
+    // Current collapsing layer: animated reverse lines
+    const collapseLegs = this.plan.legsByLayer[this.collapsingLayer] ?? [];
+    for (const leg of collapseLegs) {
+      if (leg.mode === "pass") continue;
+      const inst = interpolateLegReverse(leg, t);
+      lines.push({
+        from: [leg.to[0], leg.to[1], leg.to[2]],
+        to: [inst.x, inst.y, inst.z],
+      });
+    }
+
+    // Layers below: still showing static lines
+    for (let layer = this.collapsingLayer - 1; layer >= 1; layer--) {
+      const layerLegs = this.plan.legsByLayer[layer] ?? [];
+      for (const leg of layerLegs) {
+        if (leg.mode === "pass") continue;
+        lines.push({
+          from: leg.from,
+          to: leg.to,
+        });
       }
     }
 
@@ -310,5 +346,17 @@ function interpolateLeg(leg: SegmentLeg, t: number): SegmentInstance {
     z: leg.from[2] + (leg.to[2] - leg.from[2]) * t,
     w: leg.fromSize[0] + (leg.toSize[0] - leg.fromSize[0]) * t,
     h: leg.fromSize[1] + (leg.toSize[1] - leg.fromSize[1]) * t,
+  };
+}
+
+/** Reverse interpolation: to → from */
+function interpolateLegReverse(leg: SegmentLeg, t: number): SegmentInstance {
+  return {
+    segId: leg.segId,
+    x: leg.to[0] + (leg.from[0] - leg.to[0]) * t,
+    y: leg.to[1] + (leg.from[1] - leg.to[1]) * t,
+    z: leg.to[2] + (leg.from[2] - leg.to[2]) * t,
+    w: leg.toSize[0] + (leg.fromSize[0] - leg.toSize[0]) * t,
+    h: leg.toSize[1] + (leg.fromSize[1] - leg.toSize[1]) * t,
   };
 }

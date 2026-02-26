@@ -1,4 +1,4 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
 import { button, useControls } from "leva";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -126,7 +126,6 @@ function ShuffleContent({
 }: ShuffleContentProps) {
 	const systemRef = useRef<BuildSystem | null>(null);
 	const lastResetRef = useRef(0);
-	const [currentLayer, setCurrentLayer] = useState(0);
 
 	// Initialize or reset the build system
 	if (!systemRef.current) {
@@ -139,30 +138,16 @@ function ShuffleContent({
 		lastResetRef.current = resetTrigger;
 		const plan = compilePlan(segments, config);
 		systemRef.current = new BuildSystem(plan, config);
-		setCurrentLayer(0);
 	}
 
-	// Handle idle → restart loop
 	const system = systemRef.current;
-	if (system.state.phase === "idle") {
-		const plan = compilePlan(segments, config);
-		system.reset(plan);
-		setCurrentLayer(0);
-	}
-
-	// Track current layer for CameraRig
-	const prevLayerRef = useRef(0);
-	if (system.state.currentLayer !== prevLayerRef.current) {
-		prevLayerRef.current = system.state.currentLayer;
-		setCurrentLayer(system.state.currentLayer);
-	}
 
 	return (
 		<>
-			<CameraRig
-				currentGen={currentLayer}
-				maxGenerations={config.maxGenerations}
-				layerSpacing={config.layerSpacing}
+			<CameraAndLifecycle
+				buildSystem={system}
+				segments={segments}
+				config={config}
 			/>
 			<SegmentMeshes
 				segments={segments}
@@ -171,6 +156,40 @@ function ShuffleContent({
 			/>
 			<ConnectionLines buildSystem={system} />
 		</>
+	);
+}
+
+/** Handles idle→restart loop and feeds currentLayer to CameraRig via ref */
+function CameraAndLifecycle({
+	buildSystem,
+	segments,
+	config,
+}: {
+	buildSystem: BuildSystem;
+	segments: SegmentInfo[];
+	config: ShuffleConfig;
+}) {
+	const currentLayerRef = useRef(1);
+
+	useFrame(() => {
+		// Handle idle → restart loop
+		if (buildSystem.state.phase === "idle") {
+			const plan = compilePlan(segments, config);
+			buildSystem.reset(plan);
+			currentLayerRef.current = 1;
+		}
+
+		// Track current layer directly via ref (bypasses React render)
+		currentLayerRef.current = buildSystem.state.currentLayer;
+	});
+
+	return (
+		<CameraRig
+			currentGen={1}
+			currentGenRef={currentLayerRef}
+			maxGenerations={config.maxGenerations}
+			layerSpacing={config.layerSpacing}
+		/>
 	);
 }
 
@@ -274,7 +293,7 @@ function Scene() {
 
 function App() {
 	return (
-		<div className="h-[calc(100vh-72px)] min-h-[520px]">
+		<div className="h-100vh min-h-[520px]">
 			<Canvas
 				orthographic
 				camera={{ position: [0, 1.3, 2], zoom: 200, near: 0.1, far: 100 }}

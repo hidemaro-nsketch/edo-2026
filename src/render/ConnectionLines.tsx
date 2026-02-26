@@ -4,25 +4,29 @@ import {
   BufferGeometry,
   Float32BufferAttribute,
   LineBasicMaterial,
+  LineSegments,
 } from "three";
 import type { BuildSystem } from "../layered-shuffle/build-system";
 
 const LINE_COLOR = 0xffffff;
 const LINE_OPACITY = 0.3;
 
-const lineMaterial = new LineBasicMaterial({
-  color: LINE_COLOR,
-  transparent: true,
-  opacity: LINE_OPACITY,
-  depthWrite: false,
-});
-
 type ConnectionLinesProps = {
   buildSystem: BuildSystem;
 };
 
 export function ConnectionLines({ buildSystem }: ConnectionLinesProps) {
-  const geoRef = useRef<BufferGeometry>(new BufferGeometry());
+  const objRef = useRef(
+    new LineSegments(
+      new BufferGeometry(),
+      new LineBasicMaterial({
+        color: LINE_COLOR,
+        transparent: true,
+        opacity: LINE_OPACITY,
+        depthWrite: false,
+      }),
+    ),
+  );
 
   useFrame(() => {
     const lines = buildSystem.getConnectionLines();
@@ -35,7 +39,7 @@ export function ConnectionLines({ buildSystem }: ConnectionLinesProps) {
       );
     }
 
-    const geo = geoRef.current;
+    const geo = objRef.current.geometry;
     if (positions.length > 0) {
       const attr = geo.getAttribute("position") as Float32BufferAttribute | undefined;
       if (attr && attr.array.length === positions.length) {
@@ -52,5 +56,5 @@ export function ConnectionLines({ buildSystem }: ConnectionLinesProps) {
     }
   });
 
-  return <lineSegments geometry={geoRef.current} material={lineMaterial} />;
+  return <primitive object={objRef.current} />;
 }

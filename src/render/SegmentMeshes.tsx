@@ -1,11 +1,11 @@
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   CustomBlending,
   DoubleSide,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
-  type Mesh,
+  Mesh,
   OneFactor,
   OneMinusSrcAlphaFactor,
   PlaneGeometry,
@@ -192,51 +192,43 @@ export function SegmentMeshes({
   atlasTexture,
   buildSystem,
 }: SegmentMeshesProps) {
-  const baseMeshRef = useRef<Mesh>(null);
-  const activeMeshRef = useRef<Mesh>(null);
-  const settledMeshRef = useRef<Mesh>(null);
-
   const { baseGeo, activeGeo, settledGeo, material } = useMemo(() => {
     const bg = buildBaseGeometry(segments);
-    // Max active: all segments can be in flight
     const ag = createDynamicGeometry(segments.length);
-    // Max settled: all segments across all layers
     const sg = createDynamicGeometry(segments.length * 12);
     const mat = createMaterial(atlasTexture);
     return { baseGeo: bg, activeGeo: ag, settledGeo: sg, material: mat };
   }, [segments, atlasTexture]);
 
+  // Create meshes imperatively to avoid R3F v9 <primitive> issues
+  const baseMeshRef = useRef<Mesh>(new Mesh(baseGeo.geo, material));
+  const activeMeshRef = useRef<Mesh>(new Mesh(activeGeo.geo, material));
+  const settledMeshRef = useRef<Mesh>(new Mesh(settledGeo.geo, material));
+
+  useEffect(() => {
+    baseMeshRef.current.geometry = baseGeo.geo;
+    baseMeshRef.current.material = material;
+    activeMeshRef.current.geometry = activeGeo.geo;
+    activeMeshRef.current.material = material;
+    settledMeshRef.current.geometry = settledGeo.geo;
+    settledMeshRef.current.material = material;
+  }, [baseGeo, activeGeo, settledGeo, material]);
+
   useFrame((_, delta) => {
     buildSystem.update(delta);
 
-    // Update active instances
     const activeInstances = buildSystem.getActiveInstances();
     writeInstances(activeGeo, activeInstances, segments);
 
-    // Update settled instances
     const settledInstances = buildSystem.getSettledInstances();
-    writeInstances(settledGeo, settledInstances, segments, buildSystem.settledOpacity);
+    writeInstances(settledGeo, settledInstances, segments);
   });
 
   return (
     <>
-      {/* Base mesh: layer 0, always visible */}
-      <mesh ref={baseMeshRef} frustumCulled={false}>
-        <primitive object={baseGeo.geo} attach="geometry" />
-        <primitive object={material} attach="material" />
-      </mesh>
-
-      {/* Active mesh: flying segments */}
-      <mesh ref={activeMeshRef} frustumCulled={false}>
-        <primitive object={activeGeo.geo} attach="geometry" />
-        <primitive object={material} attach="material" />
-      </mesh>
-
-      {/* Settled mesh: segments at their final positions */}
-      <mesh ref={settledMeshRef} frustumCulled={false}>
-        <primitive object={settledGeo.geo} attach="geometry" />
-        <primitive object={material} attach="material" />
-      </mesh>
+      <primitive object={baseMeshRef.current} frustumCulled={false} />
+      <primitive object={activeMeshRef.current} frustumCulled={false} />
+      <primitive object={settledMeshRef.current} frustumCulled={false} />
     </>
   );
 }

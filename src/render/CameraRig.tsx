@@ -21,6 +21,8 @@ type CameraRigProps = {
   maxGenerations: number;
   layerSpacing: number;
   enabled?: boolean;
+  /** Optional ref that overrides currentGen prop on every frame */
+  currentGenRef?: React.RefObject<number>;
 };
 
 /**
@@ -38,6 +40,7 @@ export function CameraRig({
   maxGenerations,
   layerSpacing,
   enabled = true,
+  currentGenRef,
 }: CameraRigProps): null {
   const { camera } = useThree();
 
@@ -51,13 +54,16 @@ export function CameraRig({
   useFrame((_, delta) => {
     if (!enabled) return;
 
+    // Use ref value if available (bypasses React render cycle)
+    const gen = currentGenRef?.current ?? currentGen;
+
     // Camera starts moving at maxGenerations - 1
     const cameraRevealGen = maxGenerations - 1;
     const revealRange = maxGenerations - cameraRevealGen;
     const rawT =
       revealRange > 0
         ? MathUtils.clamp(
-            (currentGen - cameraRevealGen) / revealRange,
+            (gen - cameraRevealGen) / revealRange,
             0,
             1,
           )
@@ -66,7 +72,7 @@ export function CameraRig({
     const t = rawT * rawT * (3 - 2 * rawT);
 
     // Oblique lookAt targets the vertical center of the layer stack
-    obliqueLookAt.current.set(0, 0, currentGen * layerSpacing * 0.5);
+    obliqueLookAt.current.set(0, 0, gen * layerSpacing * 0.5);
 
     // Interpolate position and lookAt between presets
     targetPos.current.lerpVectors(TOP_DOWN_POSITION, OBLIQUE_POSITION, t);
