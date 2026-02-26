@@ -125,11 +125,13 @@ export class BuildSystem {
 
   private commitLayer(): void {
     const layer = this.state.currentLayer;
-    const settleIds = new Set(this.plan.settleIdsByLayer[layer] ?? []);
 
-    // Add settled segments
+    // Add all segments that have settled at or before this layer.
+    // This includes segments settling for the first time (settleLayer == layer)
+    // and segments that already settled in earlier layers (pass-through).
     for (const leg of this.plan.legsByLayer[layer] ?? []) {
-      if (settleIds.has(leg.segId)) {
+      const lifecycle = this.plan.lifecycles[leg.segId];
+      if (lifecycle.settleLayer <= layer) {
         this.settled.push({
           segId: leg.segId,
           x: leg.to[0],
@@ -272,21 +274,26 @@ export class BuildSystem {
     const eased = easeOutCubic(progress);
     const animatingSegIds = new Set<number>();
 
-    // Current collapsing layer: reverse-fly legs (to → from)
+    // Current collapsing layer: only reverse-fly segments that actually
+    // settled at or before this layer (not future-settle pass-throughs)
     const legs = this.plan.legsByLayer[this.collapsingLayer] ?? [];
     for (const leg of legs) {
+      const lifecycle = this.plan.lifecycles[leg.segId];
+      if (lifecycle.settleLayer > this.collapsingLayer) continue;
       animatingSegIds.add(leg.segId);
       instances.push(interpolateLegReverse(leg, eased));
     }
 
     // Segments settled below the current collapsing layer stay fixed at
-    // their settle-layer destination. This avoids rendering the same segment
-    // many times across multiple pass-through layers.
+    // their settle-layer destination (using the leg that targets their settleLayer).
     for (const lifecycle of this.plan.lifecycles) {
       if (lifecycle.settleLayer >= this.collapsingLayer) continue;
       if (animatingSegIds.has(lifecycle.segId)) continue;
 
-      const settledLeg = lifecycle.legs[lifecycle.legs.length - 1];
+      // Find the leg targeting the settle layer
+      const settledLeg = lifecycle.legs.find(
+        (l) => l.toLayer === lifecycle.settleLayer,
+      );
       if (!settledLeg) continue;
 
       instances.push({

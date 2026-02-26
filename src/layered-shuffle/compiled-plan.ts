@@ -14,15 +14,27 @@ import type {
 } from "./types";
 
 /**
+ * Compute bounding box area for a slot (uses the segment geometry at that slot index).
+ */
+function slotArea(segments: SegmentInfo[], slotIndex: number): number {
+  const seg = segments[slotIndex];
+  return seg.bboxInSource[2] * seg.bboxInSource[3];
+}
+
+/**
  * Generate swap pairs for a given generation.
  * Swap count increases progressively using a t^1.5 curve.
+ * Pairs slots with similar bounding box areas. The neighbourhood radius
+ * widens as generations progress: early layers pair very similar sizes,
+ * later layers allow larger size differences for more variety.
  * No slot appears in more than one pair per generation.
  */
 function generateSwapPairs(
   gen: number,
   maxGenerations: number,
-  segmentCount: number,
+  segments: SegmentInfo[],
 ): SwapPair[] {
+  const segmentCount = segments.length;
   const maxSwaps = Math.floor(segmentCount / 2);
   const t = maxGenerations <= 1 ? 1 : (gen - 1) / (maxGenerations - 1);
   const swapCount = Math.min(
@@ -30,15 +42,48 @@ function generateSwapPairs(
     maxSwaps,
   );
 
-  const indices = Array.from({ length: segmentCount }, (_, i) => i);
-  for (let i = indices.length - 1; i > 0; i--) {
+  // Sort slot indices by bbox area
+  const sorted = Array.from({ length: segmentCount }, (_, i) => i);
+  sorted.sort((a, b) => slotArea(segments, a) - slotArea(segments, b));
+
+  // Neighbourhood radius: 1 (strict adjacent) at gen 1, up to half the list at max gen
+  const maxRadius = Math.max(1, Math.floor(segmentCount / 2));
+  const radius = Math.max(1, Math.round(1 + (maxRadius - 1) * t));
+
+  // Greedy random pairing within neighbourhood
+  const used = new Set<number>();
+  const pairs: SwapPair[] = [];
+
+  // Randomize traversal order so pairs vary across layers
+  const order = Array.from({ length: sorted.length }, (_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [indices[i], indices[j]] = [indices[j], indices[i]];
+    [order[i], order[j]] = [order[j], order[i]];
   }
 
-  const pairs: SwapPair[] = [];
-  for (let i = 0; i < swapCount * 2; i += 2) {
-    pairs.push([indices[i], indices[i + 1]]);
+  for (const sortedIdx of order) {
+    if (pairs.length >= swapCount) break;
+    const slotA = sorted[sortedIdx];
+    if (used.has(slotA)) continue;
+
+    // Pick a random partner within the neighbourhood radius in sorted order
+    const lo = Math.max(0, sortedIdx - radius);
+    const hi = Math.min(sorted.length - 1, sortedIdx + radius);
+
+    // Collect eligible neighbours
+    const candidates: number[] = [];
+    for (let k = lo; k <= hi; k++) {
+      if (k === sortedIdx) continue;
+      if (!used.has(sorted[k])) candidates.push(k);
+    }
+    if (candidates.length === 0) continue;
+
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    const slotB = sorted[pick];
+
+    used.add(slotA);
+    used.add(slotB);
+    pairs.push([slotA, slotB]);
   }
 
   return pairs;
@@ -58,7 +103,7 @@ export function compilePlan(
   // Generate all swap pairs for all layers
   const swapsByLayer: SwapPair[][] = [[]]; // layer 0 has no swaps
   for (let layer = 1; layer <= maxGen; layer++) {
-    swapsByLayer.push(generateSwapPairs(layer, maxGen, count));
+    swapsByLayer.push(generateSwapPairs(layer, maxGen, segments));
   }
 
   // Build slot-to-segment mappings for each layer
@@ -112,8 +157,8 @@ export function compilePlan(
     const sLayer = settleLayer[segId];
     const legs: SegmentLeg[] = [];
 
-    // Find this segment's slot at each layer
-    for (let layer = 1; layer <= sLayer; layer++) {
+    // Find this segment's slot at each layer (including post-settle pass-through)
+    for (let layer = 1; layer <= maxGen; layer++) {
       const prevMapping = mappingByLayer[layer - 1];
       const currMapping = mappingByLayer[layer];
 
