@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   BufferGeometry,
   Float32BufferAttribute,
@@ -27,6 +27,10 @@ export function ConnectionLines({ buildSystem }: ConnectionLinesProps) {
       }),
     ),
   );
+
+  useEffect(() => {
+    objRef.current.renderOrder = 20;
+  }, []);
 
   useFrame(() => {
     const lines = buildSystem.getConnectionLines();

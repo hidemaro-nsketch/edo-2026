@@ -233,10 +233,13 @@ export function SegmentMeshes({
   useEffect(() => {
     baseMeshRef.current.geometry = baseGeo.geo;
     baseMeshRef.current.material = material;
+    baseMeshRef.current.renderOrder = 10;
     activeMeshRef.current.geometry = activeGeo.geo;
     activeMeshRef.current.material = material;
+    activeMeshRef.current.renderOrder = 11;
     settledMeshRef.current.geometry = settledGeo.geo;
     settledMeshRef.current.material = material;
+    settledMeshRef.current.renderOrder = 12;
   }, [baseGeo, activeGeo, settledGeo, material]);
 
   useFrame((_, delta) => {
