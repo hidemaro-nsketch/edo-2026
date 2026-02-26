@@ -4,14 +4,14 @@ import { Vector3, MathUtils, OrthographicCamera } from "three";
 
 // Module-level constants to avoid per-frame allocation
 // Y offset to center on top half of kimono (KIMONO_SIZE / 4 = 1.3)
-const Y_CENTER_OFFSET = 1.3;
+export const Y_CENTER_OFFSET = 1.3;
 const TOP_DOWN_POSITION = new Vector3(0, Y_CENTER_OFFSET, 50);
-const OBLIQUE_POSITION = new Vector3(2, 2 + Y_CENTER_OFFSET,4);
+const OBLIQUE_POSITION = new Vector3(2, 0.0 + Y_CENTER_OFFSET,12);
 const TOP_DOWN_LOOK_AT = new Vector3(0, Y_CENTER_OFFSET, 0);
 
 // Zoom levels for orthographic camera
-const TOP_DOWN_ZOOM = 200;
-const OBLIQUE_ZOOM = 80;
+const TOP_DOWN_ZOOM = 350;
+const OBLIQUE_ZOOM = 180;
 
 // Damping rate: higher = faster convergence
 const DAMP_RATE = 3;

@@ -7,7 +7,7 @@ import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system";
 import { compilePlan } from "../layered-shuffle/compiled-plan";
 import { DEFAULT_CONFIG, type ShuffleConfig } from "../layered-shuffle/types";
-import { CameraRig } from "../render/CameraRig";
+import { CameraRig, Y_CENTER_OFFSET } from "../render/CameraRig";
 import { SegmentMeshes } from "../render/SegmentMeshes";
 import { KIMONO_SIZE } from "../sakura/constants";
 import { loadAtlasTextures } from "../sakura/segment-manager";
@@ -53,7 +53,7 @@ function useDebugGui(): DebugGuiResult {
 
 	const layers = useControls("Layers", {
 		maxGenerations: { value: 8, min: 1, max: 20, step: 1 },
-		layerSpacing: { value: 0.5, min: 0.1, max: 4, step: 0.1 },
+		layerSpacing: { value: 1.5, min: 0.1, max: 4, step: 0.1 },
 		animationStartLayer: { value: 5, min: 1, max: 20, step: 1 },
 	});
 
@@ -301,7 +301,7 @@ function App() {
 		<div className="h-100vh min-h-[520px]">
 			<Canvas
 				orthographic
-				camera={{ position: [0, 0, 50], zoom: 200, near: 0.1, far: 200 }}
+				camera={{ position: [0, Y_CENTER_OFFSET, 50], zoom: 350, near: 0.1, far: 200 }}
 			>
 				<color attach="background" args={["black"]} />
 				<OrbitControls />
