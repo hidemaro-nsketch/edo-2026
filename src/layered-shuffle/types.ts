@@ -82,6 +82,7 @@ export type CompiledPlan = {
 export type BuildPhase =
   | "flight"     // segments flying from prev layer to current
   | "hold"       // brief pause after flight
+  | "swipe"      // instant layer: horizontal wipe transition for swap pairs
   | "commit"     // settling segments, advancing to next layer
   | "complete"   // all layers built
   | "collapsing" // collapse animation

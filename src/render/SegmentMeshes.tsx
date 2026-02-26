@@ -28,17 +28,20 @@ attribute vec2 aSize;
 attribute vec4 aUvRect;
 attribute float aOpacity;
 attribute float aIsBlackFill;
+attribute float aWipeRole;
 
 varying vec2 vUv;
 varying vec4 vUvRect;
 varying float vOpacity;
 varying float vIsBlackFill;
+varying float vWipeRole;
 
 void main() {
   vUv = uv;
   vUvRect = aUvRect;
   vOpacity = aOpacity;
   vIsBlackFill = aIsBlackFill;
+  vWipeRole = aWipeRole;
 
   vec3 scaled = position * vec3(aSize, 1.0);
   vec3 worldPos = scaled + vec3(aPosition, aPositionZ);
@@ -54,10 +57,25 @@ varying vec2 vUv;
 varying vec4 vUvRect;
 varying float vOpacity;
 varying float vIsBlackFill;
+varying float vWipeRole;
 
 uniform sampler2D uAtlas;
+uniform float uSwipeProgress;
 
 void main() {
+  // Swipe clipping: use local quad UV.x (0..1)
+  if (vWipeRole > 0.5) {
+    float x = vUv.x;
+    float p = uSwipeProgress;
+    if (vWipeRole < 1.5) {
+      // Old segment: keep right portion, discard left as wipe progresses
+      if (x < p) discard;
+    } else {
+      // New segment: keep left portion, discard right
+      if (x > p) discard;
+    }
+  }
+
   if (vIsBlackFill > 0.5) {
     vec2 flippedUv = vec2(vUv.x, 1.0 - vUv.y);
     vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
@@ -82,7 +100,10 @@ function createMaterial(atlas: Texture): ShaderMaterial {
   return new ShaderMaterial({
     vertexShader,
     fragmentShader,
-    uniforms: { uAtlas: { value: atlas } },
+    uniforms: {
+      uAtlas: { value: atlas },
+      uSwipeProgress: { value: 0 },
+    },
     transparent: true,
     depthWrite: false,
     blending: CustomBlending,
@@ -101,6 +122,7 @@ type DynamicGeometry = {
   uvRect: InstancedBufferAttribute;
   opacity: InstancedBufferAttribute;
   isBlackFill: InstancedBufferAttribute;
+  wipeRole: InstancedBufferAttribute;
   maxInstances: number;
 };
 
@@ -117,6 +139,7 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
   const uvRect = new InstancedBufferAttribute(new Float32Array(maxInstances * 4), 4);
   const opacity = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
   const isBlackFill = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
+  const wipeRole = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
 
   geo.setAttribute("aPosition", posXY);
   geo.setAttribute("aPositionZ", posZ);
@@ -124,9 +147,10 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
   geo.setAttribute("aUvRect", uvRect);
   geo.setAttribute("aOpacity", opacity);
   geo.setAttribute("aIsBlackFill", isBlackFill);
+  geo.setAttribute("aWipeRole", wipeRole);
   geo.instanceCount = 0;
 
-  return { geo, posXY, posZ, size, uvRect, opacity, isBlackFill, maxInstances };
+  return { geo, posXY, posZ, size, uvRect, opacity, isBlackFill, wipeRole, maxInstances };
 }
 
 function writeInstances(
@@ -160,6 +184,7 @@ function writeInstances(
     const op = opacityOverride?.get(inst.segId) ?? 1;
     dg.opacity.setX(i, op);
     dg.isBlackFill.setX(i, 0);
+    dg.wipeRole.setX(i, inst.wipeRole);
   }
 
   // Write black fill instances after segment instances
@@ -181,6 +206,7 @@ function writeInstances(
 
       dg.opacity.setX(idx, 1);
       dg.isBlackFill.setX(idx, 1);
+      dg.wipeRole.setX(idx, 0);
     }
   }
 
@@ -190,6 +216,7 @@ function writeInstances(
   dg.uvRect.needsUpdate = true;
   dg.opacity.needsUpdate = true;
   dg.isBlackFill.needsUpdate = true;
+  dg.wipeRole.needsUpdate = true;
 }
 
 function sortBackToFront(
@@ -235,6 +262,7 @@ function buildBaseGeometry(segments: SegmentInfo[]): DynamicGeometry {
       z: 0,
       w: bboxW * KIMONO_SIZE,
       h: bboxH * KIMONO_SIZE,
+      wipeRole: 0,
     });
   }
 
@@ -333,6 +361,9 @@ export function SegmentMeshes({
 
   useFrame((_, delta) => {
     buildSystem.update(delta);
+
+    // Update swipe progress uniform
+    material.uniforms.uSwipeProgress.value = buildSystem.getSwipeProgress();
 
     // Active instances (flying segments for current layer)
     const currentLayer = buildSystem.getCurrentLayer();

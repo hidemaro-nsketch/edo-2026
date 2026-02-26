@@ -3,12 +3,11 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
 import { button, useControls } from "leva";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DoubleSide, SRGBColorSpace, type Texture, TextureLoader } from "three";
+import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system";
 import { compilePlan } from "../layered-shuffle/compiled-plan";
 import { DEFAULT_CONFIG, type ShuffleConfig } from "../layered-shuffle/types";
 import { CameraRig } from "../render/CameraRig";
-import { ConnectionLines } from "../render/ConnectionLines";
 import { SegmentMeshes } from "../render/SegmentMeshes";
 import { KIMONO_SIZE } from "../sakura/constants";
 import { loadAtlasTextures } from "../sakura/segment-manager";
@@ -48,12 +47,12 @@ function useDebugGui(): DebugGuiResult {
 	});
 
 	const animation = useControls("Animation", {
-		flightDuration: { value: 0.6, min: 0.1, max: 3, step: 0.1 },
-		holdDuration: { value: 0.3, min: 0, max: 2, step: 0.1 },
+		flightDuration: { value: 0.5, min: 0.1, max: 6, step: 0.1 },
+		holdDuration: { value: 4.0, min: 0, max: 10, step: 0.1 },
 	});
 
 	const layers = useControls("Layers", {
-		maxGenerations: { value: 10, min: 1, max: 20, step: 1 },
+		maxGenerations: { value: 8, min: 1, max: 20, step: 1 },
 		layerSpacing: { value: 0.5, min: 0.1, max: 4, step: 0.1 },
 		animationStartLayer: { value: 5, min: 1, max: 20, step: 1 },
 	});
@@ -158,7 +157,7 @@ function ShuffleContent({
 				atlasTexture={atlasTexture}
 				buildSystem={system}
 			/>
-			<ConnectionLines buildSystem={system} />
+			{/* <ConnectionLines buildSystem={system} /> */}
 		</>
 	);
 }

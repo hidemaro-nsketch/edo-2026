@@ -14,6 +14,8 @@ export type SegmentInstance = {
   z: number;
   w: number;
   h: number;
+  /** Wipe role: 0 = normal, 1 = old (clipping away), 2 = new (revealing) */
+  wipeRole: number;
 };
 
 /** Instance data for a black fill at a vacated slot (uses segment shape via atlas UV) */
@@ -81,6 +83,9 @@ export class BuildSystem {
       case "hold":
         this.updateHold(deltaTime);
         return;
+      case "swipe":
+        this.updateSwipe(deltaTime);
+        return;
       case "commit":
         this.commitLayer();
         return;
@@ -102,13 +107,30 @@ export class BuildSystem {
   }
 
   private updateFlight(dt: number): void {
-    // Instant layers skip flight and hold, go straight to commit
+    // Instant layers: use swipe transition if there are settle legs, otherwise commit
     if (this.isInstantLayer()) {
-      this.state.phase = "commit";
-      this.state.phaseTime = 0;
+      const layer = this.state.currentLayer;
+      const hasSettleLegs = (this.plan.legsByLayer[layer] ?? []).some(
+        (leg) => leg.mode === "settle",
+      );
+      if (hasSettleLegs) {
+        this.state.phase = "swipe";
+        this.state.phaseTime = 0;
+      } else {
+        this.state.phase = "commit";
+        this.state.phaseTime = 0;
+      }
       return;
     }
 
+    this.state.phaseTime += dt;
+    if (this.state.phaseTime >= this.config.flightDuration) {
+      this.state.phase = "hold";
+      this.state.phaseTime = 0;
+    }
+  }
+
+  private updateSwipe(dt: number): void {
     this.state.phaseTime += dt;
     if (this.state.phaseTime >= this.config.flightDuration) {
       this.state.phase = "hold";
@@ -140,6 +162,7 @@ export class BuildSystem {
           z: leg.to[2],
           w: leg.toSize[0],
           h: leg.toSize[1],
+          wipeRole: 0,
           layer,
         });
         this.settledDirty = true;
@@ -224,9 +247,16 @@ export class BuildSystem {
         segId: mapping[i],
         x: 0, y: 0, z: 0, // will be filled by renderer from segments
         w: 0, h: 0,
+        wipeRole: 0,
       });
     }
     return instances;
+  }
+
+  /** Get swipe progress (0..1) for the uSwipeProgress uniform */
+  getSwipeProgress(): number {
+    if (this.state.phase !== "swipe") return 0;
+    return Math.min(this.state.phaseTime / this.config.flightDuration, 1);
   }
 
   /** Get all active (in-flight + passing-through) segment instances */
@@ -239,6 +269,11 @@ export class BuildSystem {
 
     if (phase === "complete" || phase === "holding" || phase === "idle") {
       return [];
+    }
+
+    // Swipe phase: emit dual instances for swap pairs
+    if (phase === "swipe") {
+      return this.getSwipeInstances();
     }
 
     const t = phase === "flight"
@@ -258,7 +293,79 @@ export class BuildSystem {
     const legs = this.plan.legsByLayer[currentLayer] ?? [];
     for (const leg of legs) {
       if (settledIds.has(leg.segId)) continue;
-      instances.push(interpolateLeg(leg, eased));
+      instances.push({ ...interpolateLeg(leg, eased), wipeRole: 0 });
+    }
+
+    return instances;
+  }
+
+  /** Get instances for the swipe phase: old+new dual instances at swap slots */
+  private getSwipeInstances(): SegmentInstance[] {
+    const layer = this.state.currentLayer;
+    const instances: SegmentInstance[] = [];
+    const settledIds = new Set<number>();
+
+    for (const s of this.settled) {
+      settledIds.add(s.segId);
+    }
+
+    const legs = this.plan.legsByLayer[layer] ?? [];
+    const prevMapping = this.plan.mappingByLayer[layer - 1];
+    const currMapping = this.plan.mappingByLayer[layer];
+
+    for (const leg of legs) {
+      if (settledIds.has(leg.segId)) continue;
+
+      if (leg.mode === "pass") {
+        // Pass-through: single instance at destination, no wipe
+        instances.push({
+          segId: leg.segId,
+          x: leg.to[0],
+          y: leg.to[1],
+          z: leg.to[2],
+          w: leg.toSize[0],
+          h: leg.toSize[1],
+          wipeRole: 0,
+        });
+      } else {
+        // Settle leg: find the old segment that was at this destination slot
+        const destSlot = currMapping.indexOf(leg.segId);
+        const oldSegId = prevMapping[destSlot];
+
+        if (oldSegId === leg.segId) {
+          // Self-swap degenerate case: no wipe needed
+          instances.push({
+            segId: leg.segId,
+            x: leg.to[0],
+            y: leg.to[1],
+            z: leg.to[2],
+            w: leg.toSize[0],
+            h: leg.toSize[1],
+            wipeRole: 0,
+          });
+        } else {
+          // Old segment at destination slot (clipping away)
+          instances.push({
+            segId: oldSegId,
+            x: leg.to[0],
+            y: leg.to[1],
+            z: leg.to[2],
+            w: leg.toSize[0],
+            h: leg.toSize[1],
+            wipeRole: 1,
+          });
+          // New segment at destination slot (revealing)
+          instances.push({
+            segId: leg.segId,
+            x: leg.to[0],
+            y: leg.to[1],
+            z: leg.to[2],
+            w: leg.toSize[0],
+            h: leg.toSize[1],
+            wipeRole: 2,
+          });
+        }
+      }
     }
 
     return instances;
@@ -300,6 +407,7 @@ export class BuildSystem {
         z: settledLeg.to[2],
         w: settledLeg.toSize[0],
         h: settledLeg.toSize[1],
+        wipeRole: 0,
       });
     }
 
@@ -429,6 +537,7 @@ function interpolateLeg(leg: SegmentLeg, t: number): SegmentInstance {
     z: leg.from[2] + (leg.to[2] - leg.from[2]) * t,
     w: leg.fromSize[0] + (leg.toSize[0] - leg.fromSize[0]) * t,
     h: leg.fromSize[1] + (leg.toSize[1] - leg.fromSize[1]) * t,
+    wipeRole: 0,
   };
 }
 
@@ -441,5 +550,6 @@ function interpolateLegReverse(leg: SegmentLeg, t: number): SegmentInstance {
     z: leg.to[2] + (leg.from[2] - leg.to[2]) * t,
     w: leg.toSize[0] + (leg.fromSize[0] - leg.toSize[0]) * t,
     h: leg.toSize[1] + (leg.fromSize[1] - leg.toSize[1]) * t,
+    wipeRole: 0,
   };
 }
