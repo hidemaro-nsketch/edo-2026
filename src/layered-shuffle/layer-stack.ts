@@ -152,6 +152,9 @@ export class LayerStack {
     return this.currentGen >= this.config.maxGenerations;
   }
 
+  /** Original Z positions for collapse animation (set when collapse starts) */
+  private collapseOriginalZ: number[] = [];
+
   /**
    * Start the collapse sequence from the highest generation layer.
    */
@@ -161,11 +164,14 @@ export class LayerStack {
     this.collapsingIndex = this.layers.length - 1;
     this.collapseTimer = 0;
     this.staggerTimer = 0;
+    // Snapshot original Z positions
+    this.collapseOriginalZ = this.layers.map((l) => l.z);
   }
 
   /**
    * Update the collapse animation.
-   * Fades layers from top (highest gen) to bottom (gen 1), skipping gen 0.
+   * Each layer slides in Z to overlap the layer below it, then disappears.
+   * Layers collapse from top (highest gen) to bottom (gen 1), skipping gen 0.
    * Returns true if collapse is still in progress, false when complete.
    */
   updateCollapse(deltaTime: number): boolean {
@@ -181,20 +187,29 @@ export class LayerStack {
 
     const layer = this.layers[this.collapsingIndex];
 
-    // Handle stagger delay before this layer starts fading
+    // Handle stagger delay before this layer starts moving
     if (this.staggerTimer > 0) {
       this.staggerTimer -= deltaTime;
       return true;
     }
 
-    // Fade out the current layer
+    // Slide Z toward the layer below
     this.collapseTimer += deltaTime;
     const progress = Math.min(this.collapseTimer / this.config.collapseDuration, 1);
-    layer.opacity = 1 - progress;
+    // Ease-out for snappy movement
+    const eased = 1 - (1 - progress) * (1 - progress);
+
+    const fromZ = this.collapseOriginalZ[this.collapsingIndex];
+    const targetZ = this.collapseOriginalZ[this.collapsingIndex - 1];
+    layer.z = fromZ + (targetZ - fromZ) * eased;
+
+    // Fade out in the last portion of the slide
+    layer.opacity = progress < 0.5 ? 1 : 1 - (progress - 0.5) * 2;
 
     if (progress >= 1) {
       layer.alive = false;
       layer.opacity = 0;
+      layer.z = targetZ;
 
       // Move to next layer down
       this.collapsingIndex -= 1;
@@ -225,6 +240,7 @@ export class LayerStack {
     this.collapsingIndex = -1;
     this.collapseTimer = 0;
     this.staggerTimer = 0;
+    this.collapseOriginalZ = [];
   }
 
   /**

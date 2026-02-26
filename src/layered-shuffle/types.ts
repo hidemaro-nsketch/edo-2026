@@ -12,8 +12,6 @@ export type ShuffleConfig = {
   fadeDuration: number;
   /** Z distance between adjacent layers */
   layerSpacing: number;
-  /** Generation at which camera starts transitioning to oblique view */
-  cameraRevealGen: number;
   /** Duration of each layer's fade-out during collapse in seconds */
   collapseDuration: number;
   /** Stagger delay between consecutive layer collapses in seconds */
@@ -62,8 +60,7 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
   switchIntervalMax: 0.5,
   fadeDuration: 0.6,
   layerSpacing: 1.0,
-  cameraRevealGen: 5,
-  collapseDuration: 0.5,
-  collapseStagger: 0.3,
+  collapseDuration: 0.1,
+  collapseStagger: 0.08,
   holdAfterComplete: 1.0,
 };

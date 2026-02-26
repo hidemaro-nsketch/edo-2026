@@ -59,12 +59,11 @@ function useDebugGui(): DebugGuiResult {
 	const layers = useControls("Layers", {
 		maxGenerations: { value: 10, min: 1, max: 20, step: 1 },
 		layerSpacing: { value: 1.0, min: 0.1, max: 4, step: 0.1 },
-		cameraRevealGen: { value: 5, min: 1, max: 10, step: 1 },
 	});
 
 	const collapse = useControls("Collapse", {
-		collapseDuration: { value: 0.5, min: 0.1, max: 3, step: 0.1 },
-		collapseStagger: { value: 0.3, min: 0, max: 2, step: 0.05 },
+		collapseDuration: { value: 0.1, min: 0.05, max: 3, step: 0.05 },
+		collapseStagger: { value: 0.08, min: 0, max: 2, step: 0.01 },
 		holdAfterComplete: { value: 1.0, min: 0, max: 5, step: 0.1 },
 	});
 
@@ -362,7 +361,6 @@ function LayeredShuffleContent({
 			<CameraRig
 				currentGen={currentGen}
 				maxGenerations={config.maxGenerations}
-				cameraRevealGen={config.cameraRevealGen}
 				layerSpacing={config.layerSpacing}
 			/>
 			{renderLayers.map((layer) => (
@@ -453,8 +451,6 @@ function Scene() {
 			switchIntervalMax: gui.switchIntervalMax,
 			fadeDuration: gui.fadeDuration,
 			layerSpacing: gui.layerSpacing ?? DEFAULT_CONFIG.layerSpacing,
-			cameraRevealGen:
-				gui.cameraRevealGen ?? DEFAULT_CONFIG.cameraRevealGen,
 			collapseDuration:
 				gui.collapseDuration ?? DEFAULT_CONFIG.collapseDuration,
 			collapseStagger:

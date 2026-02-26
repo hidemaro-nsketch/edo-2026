@@ -41,8 +41,8 @@ export function ConnectionLines({
       );
       if (!prevLayer) continue;
 
-      const zFrom = (layer.gen - 1) * layerSpacing;
-      const zTo = layer.gen * layerSpacing;
+      const zFrom = prevLayer.z;
+      const zTo = layer.z;
 
       for (const link of layer.linksFromPrev) {
         const [x, y] = getSlotWorldPos(segments, link.slotIndex);

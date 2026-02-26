@@ -19,7 +19,6 @@ const DAMP_RATE = 3;
 type CameraRigProps = {
   currentGen: number;
   maxGenerations: number;
-  cameraRevealGen: number;
   layerSpacing: number;
   enabled?: boolean;
 };
@@ -31,13 +30,12 @@ type CameraRigProps = {
  * Uses OrthographicCamera so layers at different Z positions
  * overlap perfectly when viewed top-down.
  *
- * - Gen 0..cameraRevealGen: top-down (looking straight down Z)
- * - Gen cameraRevealGen..maxGenerations: smooth transition to oblique angle
+ * - Gen 0..(maxGenerations-1): top-down (looking straight down Z)
+ * - Gen (maxGenerations-1)..maxGenerations: smooth transition to oblique angle
  */
 export function CameraRig({
   currentGen,
   maxGenerations,
-  cameraRevealGen,
   layerSpacing,
   enabled = true,
 }: CameraRigProps): null {
@@ -53,7 +51,8 @@ export function CameraRig({
   useFrame((_, delta) => {
     if (!enabled) return;
 
-    // Compute blend factor with smoothstep
+    // Camera starts moving at maxGenerations - 1
+    const cameraRevealGen = maxGenerations - 1;
     const revealRange = maxGenerations - cameraRevealGen;
     const rawT =
       revealRange > 0
