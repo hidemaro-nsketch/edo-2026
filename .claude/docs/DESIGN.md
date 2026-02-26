@@ -139,6 +139,47 @@ KTX2 compression can be added as optimization later.
 - What should happen when all segments of a category are hidden — show empty cells or redistribute?
 - Should there be a UI for controlling sweep speed / transition timing?
 
+## Layered Shuffle Architecture (2026-02-26)
+
+### Concept
+
+Shuffle generations stack as Z-layers, creating a 3D "history" of shuffles.
+Layer 0 = original image. Layers 1-10 = shuffle generation results.
+Lines connect shuffled segments between adjacent layers.
+
+### Architecture Decisions (Codex Consultation)
+
+1. **Per-layer instanced meshes**: 11 separate meshes (33 instances each), not one giant 363-instance mesh. Simpler lifecycle, per-layer opacity via uniforms.
+2. **Immutable snapshot model**: Each layer stores `slotToTex` (which texture each slot shows), `changedSlots` (diff vs previous), `linksFromPrev` (connection data).
+3. **Single dynamic LineSegments**: One preallocated buffer for all connection lines, updated on generation events only.
+4. **Camera preset blending**: Top-down for gen 1-5, oblique for 6-10, `t = clamp((gen-5)/5, 0, 1)` with smoothstep.
+5. **Hybrid collapse**: Shader opacity fade per layer → deactivate after fade.
+
+### File Structure
+
+```
+src/
+  layered-shuffle/
+    layer-stack.ts           # Generation state machine, shuffle logic, diffs
+    types.ts                 # LayerState, ShuffleConfig types
+  render/
+    LayerMesh.tsx            # Per-layer instanced renderer
+    ConnectionLines.tsx      # Dynamic LineSegments
+    CameraRig.tsx            # Preset blending camera
+  routes/
+    index.tsx                # Orchestration (rewritten)
+```
+
+### Sequence
+
+```
+INIT → [SHUFFLE gen1 → FREEZE] → ... → [SHUFFLE gen10 → FREEZE]
+     → CAMERA_REVEAL (oblique at gen 6+)
+     → COLLAPSE (layers 10→1 fade out sequentially)
+     → LOOP (restart from INIT)
+```
+
 ## Changelog
 
+- 2026-02-26: Layered shuffle architecture (Codex consultation). Per-layer instancing, connection lines, camera rig.
 - 2026-02-18: Initial architecture design (Codex consultation). Paged atlas + data textures + bitmask filtering.
