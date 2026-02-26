@@ -1,3 +1,4 @@
+import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
 import { button, useControls } from "leva";
@@ -6,7 +7,6 @@ import { DoubleSide, SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system";
 import { compilePlan } from "../layered-shuffle/compiled-plan";
 import { DEFAULT_CONFIG, type ShuffleConfig } from "../layered-shuffle/types";
-import { CameraRig } from "../render/CameraRig";
 import { ConnectionLines } from "../render/ConnectionLines";
 import { SegmentMeshes } from "../render/SegmentMeshes";
 import { KIMONO_SIZE } from "../sakura/constants";
@@ -86,6 +86,7 @@ function KimonoBackground({
 	return (
 		<mesh
 			position={[0, yOffset, -0.1]}
+			renderOrder={0}
 			onUpdate={(mesh) => {
 				const uv = mesh.geometry.getAttribute("uv");
 				if (uv && !(uv as any).__halfAdjusted) {
@@ -104,6 +105,7 @@ function KimonoBackground({
 				side={DoubleSide}
 				transparent
 				opacity={opacity}
+				depthWrite={false}
 			/>
 		</mesh>
 	);
@@ -159,7 +161,7 @@ function ShuffleContent({
 	);
 }
 
-/** Handles idle→restart loop and feeds currentLayer to CameraRig via ref */
+/** Handles idle→restart loop (camera is fixed at initial oblique view) */
 function CameraAndLifecycle({
 	buildSystem,
 	segments,
@@ -169,28 +171,14 @@ function CameraAndLifecycle({
 	segments: SegmentInfo[];
 	config: ShuffleConfig;
 }) {
-	const currentLayerRef = useRef(1);
-
 	useFrame(() => {
 		// Handle idle → restart loop
 		if (buildSystem.state.phase === "idle") {
 			const plan = compilePlan(segments, config);
 			buildSystem.reset(plan);
-			currentLayerRef.current = 1;
 		}
-
-		// Track current layer directly via ref (bypasses React render)
-		currentLayerRef.current = buildSystem.state.currentLayer;
 	});
-
-	return (
-		<CameraRig
-			currentGen={1}
-			currentGenRef={currentLayerRef}
-			maxGenerations={config.maxGenerations}
-			layerSpacing={config.layerSpacing}
-		/>
-	);
+	return null;
 }
 
 // ─── Scene ──────────────────────────────────────────────────────────────────
@@ -276,7 +264,7 @@ function Scene() {
 
 	return (
 		<>
-			<KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} />
+			{/* <KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} /> */}
 			{atlasTexture && (
 				<ShuffleContent
 					segments={segments}
@@ -295,10 +283,10 @@ function App() {
 	return (
 		<div className="h-100vh min-h-[520px]">
 			<Canvas
-				orthographic
-				camera={{ position: [0, 1.3, 2], zoom: 200, near: 0.1, far: 100 }}
+				camera={{ fov: 35, position: [3, 3.3, 7], near: 0.1, far: 100 }}
 			>
 				<color attach="background" args={["black"]} />
+				<OrbitControls target={[0, 0.4, 5]} />
 				<Scene />
 			</Canvas>
 		</div>
