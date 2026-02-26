@@ -216,21 +216,24 @@ export function compilePlan(
     const vacated: VacatedSlot[] = [];
     const sourceZ = (layer - 1) * config.layerSpacing;
 
+    const prevMapping = mappingByLayer[layer - 1];
     for (const [slotA, slotB] of swapsByLayer[layer]) {
-      // Slot A is vacated by prevMapping[slotA] (which moves to slotB)
+      // Slot A is vacated by the segment that was there (prevMapping[slotA])
       const [axPos, ayPos] = getSlotWorldPos(segments, slotA);
       const [aw, ah] = getSlotWorldSize(segments, slotA);
       vacated.push({
         slotIndex: slotA,
+        segId: prevMapping[slotA],
         position: [axPos, ayPos, sourceZ],
         size: [aw, ah],
       });
 
-      // Slot B is vacated by prevMapping[slotB] (which moves to slotA)
+      // Slot B is vacated by the segment that was there (prevMapping[slotB])
       const [bxPos, byPos] = getSlotWorldPos(segments, slotB);
       const [bw, bh] = getSlotWorldSize(segments, slotB);
       vacated.push({
         slotIndex: slotB,
+        segId: prevMapping[slotB],
         position: [bxPos, byPos, sourceZ],
         size: [bw, bh],
       });

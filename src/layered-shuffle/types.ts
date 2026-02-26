@@ -54,6 +54,8 @@ export type SegmentLifecycle = {
 export type VacatedSlot = {
   /** Slot index that was vacated */
   slotIndex: number;
+  /** Segment ID that previously occupied this slot (for atlas UV lookup) */
+  segId: number;
   /** World position [x, y, z] on the source layer */
   position: [number, number, number];
   /** World size [w, h] matching bboxInSource */

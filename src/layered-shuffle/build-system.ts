@@ -16,8 +16,9 @@ export type SegmentInstance = {
   h: number;
 };
 
-/** Instance data for a black fill rectangle at a vacated slot */
+/** Instance data for a black fill at a vacated slot (uses segment shape via atlas UV) */
 export type BlackFillInstance = {
+  segId: number;
   x: number;
   y: number;
   z: number;
@@ -149,6 +150,7 @@ export class BuildSystem {
     const vacated = this.plan.vacatedByLayer[layer] ?? [];
     for (const v of vacated) {
       this.blackFills.push({
+        segId: v.segId,
         x: v.position[0],
         y: v.position[1],
         z: v.position[2],

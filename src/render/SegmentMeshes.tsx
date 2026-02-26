@@ -59,7 +59,10 @@ uniform sampler2D uAtlas;
 
 void main() {
   if (vIsBlackFill > 0.5) {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    vec2 flippedUv = vec2(vUv.x, 1.0 - vUv.y);
+    vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
+    float a = texture2D(uAtlas, atlasUv).a;
+    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
     return;
   }
 
@@ -168,12 +171,13 @@ function writeInstances(
       dg.posZ.setX(idx, bf.z);
       dg.size.setXY(idx, bf.w, bf.h);
 
-      // Black fills don't use atlas UVs, but set to zero
+      // Use the original segment's atlas UVs for shape masking
+      const seg = segments[bf.segId];
       const off = idx * 4;
-      dg.uvRect.array[off] = 0;
-      dg.uvRect.array[off + 1] = 0;
-      dg.uvRect.array[off + 2] = 0;
-      dg.uvRect.array[off + 3] = 0;
+      dg.uvRect.array[off] = seg.uvRect[0];
+      dg.uvRect.array[off + 1] = seg.uvRect[1];
+      dg.uvRect.array[off + 2] = seg.uvRect[2];
+      dg.uvRect.array[off + 3] = seg.uvRect[3];
 
       dg.opacity.setX(idx, 1);
       dg.isBlackFill.setX(idx, 1);
