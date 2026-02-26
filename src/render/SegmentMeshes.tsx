@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef } from "react";
 import {
   Camera,
   CustomBlending,
-  DoubleSide,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   Mesh,
@@ -74,7 +73,6 @@ function createMaterial(atlas: Texture): ShaderMaterial {
     uniforms: { uAtlas: { value: atlas } },
     transparent: true,
     depthWrite: false,
-    side: DoubleSide,
     blending: CustomBlending,
     blendSrc: OneFactor,
     blendDst: OneMinusSrcAlphaFactor,
@@ -199,6 +197,44 @@ function buildBaseGeometry(segments: SegmentInfo[]): DynamicGeometry {
   return dg;
 }
 
+// ─── Render order constants ──────────────────────────────────────────────────
+
+const RENDER_ORDER_LAYER_STRIDE = 10;
+const RENDER_ORDER_ACTIVE_OFFSET = 1;
+const RENDER_ORDER_SETTLED_OFFSET = 2;
+
+function layerRenderOrder(layer: number, type: "active" | "settled"): number {
+  const offset = type === "active" ? RENDER_ORDER_ACTIVE_OFFSET : RENDER_ORDER_SETTLED_OFFSET;
+  return layer * RENDER_ORDER_LAYER_STRIDE + offset;
+}
+
+// ─── Per-layer mesh pool ─────────────────────────────────────────────────────
+
+type LayerMeshPool = {
+  geos: DynamicGeometry[];
+  meshes: Mesh[];
+};
+
+function createLayerMeshPool(
+  maxInstancesPerLayer: number,
+  material: ShaderMaterial,
+  layerCount: number,
+): LayerMeshPool {
+  const geos: DynamicGeometry[] = [];
+  const meshes: Mesh[] = [];
+
+  for (let i = 0; i < layerCount; i++) {
+    const dg = createDynamicGeometry(maxInstancesPerLayer);
+    const mesh = new Mesh(dg.geo, material);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = layerRenderOrder(i + 1, "settled");
+    geos.push(dg);
+    meshes.push(mesh);
+  }
+
+  return { geos, meshes };
+}
+
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 type SegmentMeshesProps = {
@@ -217,33 +253,42 @@ export function SegmentMeshes({
   const { camera } = useThree();
   const viewDirRef = useRef(new Vector3());
 
-  const { baseGeo, activeGeo, settledGeo, material } = useMemo(() => {
+  const layerCount = buildSystem.config.maxGenerations;
+
+  const { baseGeo, activeGeo, material, settledPool } = useMemo(() => {
     const bg = buildBaseGeometry(segments);
     const ag = createDynamicGeometry(segments.length);
-    const sg = createDynamicGeometry(segments.length * 12);
     const mat = createMaterial(atlasTexture);
-    return { baseGeo: bg, activeGeo: ag, settledGeo: sg, material: mat };
-  }, [segments, atlasTexture]);
+    const pool = createLayerMeshPool(segments.length, mat, layerCount);
+    return { baseGeo: bg, activeGeo: ag, material: mat, settledPool: pool };
+  }, [segments, atlasTexture, layerCount]);
 
-  // Create meshes imperatively to avoid R3F v9 <primitive> issues
   const baseMeshRef = useRef<Mesh>(new Mesh(baseGeo.geo, material));
   const activeMeshRef = useRef<Mesh>(new Mesh(activeGeo.geo, material));
-  const settledMeshRef = useRef<Mesh>(new Mesh(settledGeo.geo, material));
 
   useEffect(() => {
     baseMeshRef.current.geometry = baseGeo.geo;
     baseMeshRef.current.material = material;
-    baseMeshRef.current.renderOrder = 10;
+    baseMeshRef.current.renderOrder = 0; // layer 0
+
     activeMeshRef.current.geometry = activeGeo.geo;
     activeMeshRef.current.material = material;
-    activeMeshRef.current.renderOrder = 11;
-    settledMeshRef.current.geometry = settledGeo.geo;
-    settledMeshRef.current.material = material;
-    settledMeshRef.current.renderOrder = 12;
-  }, [baseGeo, activeGeo, settledGeo, material]);
+    // active renderOrder is updated per-frame
+
+    return () => {
+      baseGeo.geo.dispose();
+      activeGeo.geo.dispose();
+      material.dispose();
+      for (const dg of settledPool.geos) dg.geo.dispose();
+    };
+  }, [baseGeo, activeGeo, material, settledPool]);
 
   useFrame((_, delta) => {
     buildSystem.update(delta);
+
+    // Active instances (flying segments for current layer)
+    const currentLayer = buildSystem.getCurrentLayer();
+    activeMeshRef.current.renderOrder = layerRenderOrder(currentLayer, "active");
 
     const activeInstances = sortBackToFront(
       buildSystem.getActiveInstances(),
@@ -252,19 +297,24 @@ export function SegmentMeshes({
     );
     writeInstances(activeGeo, activeInstances, segments);
 
-    const settledInstances = sortBackToFront(
-      buildSystem.getSettledInstances(),
-      camera,
-      viewDirRef.current,
-    );
-    writeInstances(settledGeo, settledInstances, segments);
+    // Settled instances grouped by layer
+    const settledByLayer = buildSystem.getSettledByLayer();
+    for (let i = 0; i < layerCount; i++) {
+      const layerIdx = i + 1; // layers 1..maxGenerations
+      const layerInstances = settledByLayer.get(layerIdx) ?? [];
+      const sorted = sortBackToFront(layerInstances, camera, viewDirRef.current);
+      writeInstances(settledPool.geos[i], sorted, segments);
+      settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");
+    }
   });
 
   return (
     <>
       <primitive object={baseMeshRef.current} frustumCulled={false} />
       <primitive object={activeMeshRef.current} frustumCulled={false} />
-      <primitive object={settledMeshRef.current} frustumCulled={false} />
+      {settledPool.meshes.map((mesh, i) => (
+        <primitive key={i} object={mesh} />
+      ))}
     </>
   );
 }

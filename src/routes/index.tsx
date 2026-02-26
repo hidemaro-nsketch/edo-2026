@@ -103,7 +103,6 @@ function KimonoBackground({
 			<planeGeometry args={[KIMONO_SIZE, halfHeight]} />
 			<meshBasicMaterial
 				map={texture}
-				side={DoubleSide}
 				transparent
 				opacity={opacity}
 				depthTest={false}
@@ -148,17 +147,17 @@ function ShuffleContent({
 
 	return (
 		<>
-			<CameraAndLifecycle
+			{/* <CameraAndLifecycle
 				buildSystem={system}
 				segments={segments}
 				config={config}
-			/>
+			/> */}
 			<SegmentMeshes
 				segments={segments}
 				atlasTexture={atlasTexture}
 				buildSystem={system}
 			/>
-			<ConnectionLines buildSystem={system} />
+			{/* <ConnectionLines buildSystem={system} /> */}
 		</>
 	);
 }
@@ -300,7 +299,7 @@ function App() {
 		<div className="h-100vh min-h-[520px]">
 			<Canvas
 				orthographic
-				camera={{ position: [0, 1.3, 2], zoom: 200, near: 0.1, far: 100 }}
+				camera={{ position: [0, 2, 2], zoom: 200, near: 0.1, far: 100 }}
 			>
 				<color attach="background" args={["black"]} />
 				<OrbitControls />

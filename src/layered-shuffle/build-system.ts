@@ -28,7 +28,9 @@ export class BuildSystem {
   state: BuildState;
 
   /** Segments that have settled (append-only during build) */
-  private settled: SegmentInstance[] = [];
+  private settled: (SegmentInstance & { layer: number })[] = [];
+  private settledByLayerCache = new Map<number, SegmentInstance[]>();
+  private settledDirty = true;
   /** Collapse: current layer being reverse-played */
   private collapsingLayer = -1;
   private collapseTimer = 0;
@@ -46,6 +48,8 @@ export class BuildSystem {
     Object.assign(this, {
       plan,
       settled: [],
+      settledByLayerCache: new Map(),
+      settledDirty: true,
       collapsingLayer: -1,
       collapseTimer: 0,
       staggerTimer: 0,
@@ -107,7 +111,9 @@ export class BuildSystem {
           z: leg.to[2],
           w: leg.toSize[0],
           h: leg.toSize[1],
+          layer,
         });
+        this.settledDirty = true;
       }
     }
 
@@ -129,6 +135,7 @@ export class BuildSystem {
     this.staggerTimer = 0;
     // Clear settled — collapse uses legs for reverse-flight rendering
     this.settled = [];
+    this.settledDirty = true;
   }
 
   private updateCollapse(dt: number): void {
@@ -252,6 +259,23 @@ export class BuildSystem {
   /** Get all settled segment instances (empty during collapse — handled by getActiveInstances) */
   getSettledInstances(): SegmentInstance[] {
     return this.settled;
+  }
+
+  /** Get settled instances grouped by layer (cached, rebuilds only when dirty) */
+  getSettledByLayer(): Map<number, SegmentInstance[]> {
+    if (!this.settledDirty) return this.settledByLayerCache;
+
+    this.settledByLayerCache.clear();
+    for (const s of this.settled) {
+      let arr = this.settledByLayerCache.get(s.layer);
+      if (!arr) {
+        arr = [];
+        this.settledByLayerCache.set(s.layer, arr);
+      }
+      arr.push(s);
+    }
+    this.settledDirty = false;
+    return this.settledByLayerCache;
   }
 
   /** Get current layer being built */

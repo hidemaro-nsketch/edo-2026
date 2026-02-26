@@ -10,6 +10,7 @@ import type { BuildSystem } from "../layered-shuffle/build-system";
 
 const LINE_COLOR = 0xffffff;
 const LINE_OPACITY = 0.3;
+const CONNECTION_LINE_RENDER_ORDER = 200; // above all layer meshes (max layer 10 * 10 + 2 = 102)
 
 type ConnectionLinesProps = {
   buildSystem: BuildSystem;
@@ -29,7 +30,7 @@ export function ConnectionLines({ buildSystem }: ConnectionLinesProps) {
   );
 
   useEffect(() => {
-    objRef.current.renderOrder = 20;
+    objRef.current.renderOrder = CONNECTION_LINE_RENDER_ORDER;
   }, []);
 
   useFrame(() => {
