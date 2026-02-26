@@ -58,7 +58,7 @@ function useDebugGui(): DebugGuiResult {
 
 	const layers = useControls("Layers", {
 		maxGenerations: { value: 10, min: 1, max: 20, step: 1 },
-		layerSpacing: { value: 0.5, min: 0.1, max: 2, step: 0.1 },
+		layerSpacing: { value: 1.0, min: 0.1, max: 4, step: 0.1 },
 		cameraRevealGen: { value: 5, min: 1, max: 10, step: 1 },
 	});
 
@@ -304,9 +304,28 @@ function KimonoBackground({
 }: { texture: Texture | null; opacity: number }) {
 	if (!texture) return null;
 
+	// Show only the top half: halve height, shift up by quarter, adjust UV
+	const halfHeight = KIMONO_SIZE / 2;
+	const yOffset = halfHeight / 2;
+
 	return (
-		<mesh position={[0, 0, -0.1]}>
-			<planeGeometry args={[KIMONO_SIZE, KIMONO_SIZE]} />
+		<mesh
+			position={[0, yOffset, -0.1]}
+			onUpdate={(mesh) => {
+				const uv = mesh.geometry.getAttribute("uv");
+				if (uv && !(uv as any).__halfAdjusted) {
+					// Default plane UV: bottom-left (0,0) to top-right (1,1)
+					// Remap V from [0,1] to [0.5,1] to show only top half of texture
+					for (let i = 0; i < uv.count; i++) {
+						const v = uv.getY(i);
+						uv.setY(i, 0.5 + v * 0.5);
+					}
+					uv.needsUpdate = true;
+					(uv as any).__halfAdjusted = true;
+				}
+			}}
+		>
+			<planeGeometry args={[KIMONO_SIZE, halfHeight]} />
 			<meshBasicMaterial
 				map={texture}
 				side={DoubleSide}
@@ -470,7 +489,7 @@ function App() {
 		<div className="h-[calc(100vh-72px)] min-h-[520px]">
 			<Canvas
 				orthographic
-				camera={{ position: [0, 0, 2], zoom: 200, near: 0.1, far: 100 }}
+				camera={{ position: [0, 1.3, 2], zoom: 200, near: 0.1, far: 100 }}
 			>
 				<color attach="background" args={["black"]} />
 				<Scene />

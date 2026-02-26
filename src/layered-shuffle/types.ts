@@ -61,7 +61,7 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
   switchIntervalMin: 0.2,
   switchIntervalMax: 0.5,
   fadeDuration: 0.6,
-  layerSpacing: 0.5,
+  layerSpacing: 1.0,
   cameraRevealGen: 5,
   collapseDuration: 0.5,
   collapseStagger: 0.3,
