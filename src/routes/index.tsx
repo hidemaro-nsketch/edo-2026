@@ -8,11 +8,11 @@ import { BuildSystem } from "../layered-shuffle/build-system";
 import { compilePlan } from "../layered-shuffle/compiled-plan";
 import { DEFAULT_CONFIG, type ShuffleConfig } from "../layered-shuffle/types";
 import { CameraRig, Y_CENTER_OFFSET } from "../render/CameraRig";
+import { ConnectionLines } from "../render/ConnectionLines";
 import { SegmentMeshes } from "../render/SegmentMeshes";
 import { KIMONO_SIZE } from "../sakura/constants";
 import { loadAtlasTextures } from "../sakura/segment-manager";
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
-import { ConnectionLines } from "../render/ConnectionLines";
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -48,31 +48,19 @@ function useDebugGui(): DebugGuiResult {
 	});
 
 	const animation = useControls("Animation", {
-		flightDuration: { value: 0.5, min: 0.1, max: 6, step: 0.1 },
+		swipeDuration: { value: 1.5, min: 0.1, max: 6, step: 0.1 },
 		holdDuration: { value: 1.0, min: 0, max: 10, step: 0.1 },
 	});
 
 	const layers = useControls("Layers", {
 		maxGenerations: { value: 10, min: 1, max: 20, step: 1 },
 		layerSpacing: { value: 1.5, min: 0.1, max: 4, step: 0.1 },
-		animationStartLayer: { value: 7, min: 1, max: 20, step: 1 },
 	});
 
 	const collapse = useControls("Collapse", {
 		collapseDuration: { value: 0.1, min: 0.05, max: 3, step: 0.05 },
 		collapseStagger: { value: 0.08, min: 0, max: 2, step: 0.01 },
 		holdAfterComplete: { value: 1.0, min: 0, max: 5, step: 0.1 },
-	});
-
-	const build = useControls("Build", {
-		buildStagger: { value: 0.08, min: 0, max: 2, step: 0.01 },
-		flightStagger: { value: 0.8, min: 0, max: 5, step: 0.01 },
-	});
-
-	const flash = useControls("Flash", {
-		flashCount: { value: 4, min: 0, max: 8, step: 1 },
-		flashOnDuration: { value: 0.08, min: 0.02, max: 0.5, step: 0.01 },
-		flashOffDuration: { value: 0.03, min: 0.02, max: 0.5, step: 0.01 },
 	});
 
 	useControls("Actions", {
@@ -82,7 +70,7 @@ function useDebugGui(): DebugGuiResult {
 		}),
 	});
 
-	return { ...opacity, ...animation, ...layers, ...collapse, ...build, ...flash, resetTrigger };
+	return { ...opacity, ...animation, ...layers, ...collapse, resetTrigger };
 }
 
 // ─── KimonoBackground ───────────────────────────────────────────────────────
@@ -90,7 +78,10 @@ function useDebugGui(): DebugGuiResult {
 function KimonoBackground({
 	texture,
 	opacity,
-}: { texture: Texture | null; opacity: number }) {
+}: {
+	texture: Texture | null;
+	opacity: number;
+}) {
 	if (!texture) return null;
 
 	const halfHeight = KIMONO_SIZE / 2;
@@ -272,29 +263,14 @@ function Scene() {
 
 	const config: ShuffleConfig = useMemo(
 		() => ({
-			maxGenerations:
-				gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations,
-			flightDuration: gui.flightDuration ?? DEFAULT_CONFIG.flightDuration,
+			maxGenerations: gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations,
+			swipeDuration: gui.swipeDuration ?? DEFAULT_CONFIG.swipeDuration,
 			holdDuration: gui.holdDuration ?? DEFAULT_CONFIG.holdDuration,
 			layerSpacing: gui.layerSpacing ?? DEFAULT_CONFIG.layerSpacing,
-			collapseDuration:
-				gui.collapseDuration ?? DEFAULT_CONFIG.collapseDuration,
-			collapseStagger:
-				gui.collapseStagger ?? DEFAULT_CONFIG.collapseStagger,
+			collapseDuration: gui.collapseDuration ?? DEFAULT_CONFIG.collapseDuration,
+			collapseStagger: gui.collapseStagger ?? DEFAULT_CONFIG.collapseStagger,
 			holdAfterComplete:
 				gui.holdAfterComplete ?? DEFAULT_CONFIG.holdAfterComplete,
-			animationStartLayer:
-				gui.animationStartLayer ?? DEFAULT_CONFIG.animationStartLayer,
-			buildStagger:
-				gui.buildStagger ?? DEFAULT_CONFIG.buildStagger,
-			flightStagger:
-				gui.flightStagger ?? DEFAULT_CONFIG.flightStagger,
-			flashCount:
-				gui.flashCount ?? DEFAULT_CONFIG.flashCount,
-			flashOnDuration:
-				gui.flashOnDuration ?? DEFAULT_CONFIG.flashOnDuration,
-			flashOffDuration:
-				gui.flashOffDuration ?? DEFAULT_CONFIG.flashOffDuration,
 		}),
 		[gui],
 	);
@@ -323,7 +299,12 @@ function App() {
 		<div className="h-100vh min-h-[520px]">
 			<Canvas
 				orthographic
-				camera={{ position: [0, Y_CENTER_OFFSET, 50], zoom: 350, near: 0.1, far: 200 }}
+				camera={{
+					position: [0, Y_CENTER_OFFSET, 50],
+					zoom: 350,
+					near: 0.1,
+					far: 200,
+				}}
 			>
 				<color attach="background" args={["black"]} />
 				<OrbitControls />

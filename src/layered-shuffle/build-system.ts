@@ -1,912 +1,448 @@
 import type {
-  BuildPhase,
-  BuildState,
-  CompiledPlan,
-  SegmentLeg,
-  ShuffleConfig,
+	BuildPhase,
+	BuildState,
+	CompiledPlan,
+	SegmentLeg,
+	ShuffleConfig,
 } from "./types";
 
-/** Instance data for one rendered segment */
 export type SegmentInstance = {
-  segId: number;
-  x: number;
-  y: number;
-  z: number;
-  w: number;
-  h: number;
-  /** Wipe role: 0 = normal, 1 = old (clipping away), 2 = new (revealing) */
-  wipeRole: number;
-  /** Whether this instance should render as a bbox outline */
-  isBboxOutline: number;
-  /** Per-instance swipe progress (0..1), used when wipeRole > 0 */
-  swipeProgress: number;
+	segId: number;
+	x: number;
+	y: number;
+	z: number;
+	w: number;
+	h: number;
+	wipeRole: number;
+	isBboxOutline: number;
+	swipeProgress: number;
 };
 
-/** Instance data for a black fill at a vacated slot (uses segment shape via atlas UV) */
 export type BlackFillInstance = {
-  segId: number;
-  x: number;
-  y: number;
-  z: number;
-  w: number;
-  h: number;
-  /** Layer where this black fill was created (for collapse removal) */
-  sourceLayer: number;
+	segId: number;
+	x: number;
+	y: number;
+	z: number;
+	w: number;
+	h: number;
+	sourceLayer: number;
 };
 
-/**
- * Runtime system that drives the sequential layer-build animation.
- * Operates on a CompiledPlan and produces segment instance data each frame.
- */
+type ConnectionLine = {
+	from: [number, number, number];
+	to: [number, number, number];
+};
+
 export class BuildSystem {
-  readonly config: ShuffleConfig;
-  readonly plan: CompiledPlan;
-  readonly segmentCount: number;
-
-  state: BuildState;
-
-  /** Segments that have settled (append-only during build) */
-  private settled: (SegmentInstance & { layer: number })[] = [];
-  private settledByLayerCache = new Map<number, SegmentInstance[]>();
-  private settledDirty = true;
-  /** Black fill rectangles at vacated slots (append-only during build) */
-  private blackFills: BlackFillInstance[] = [];
-  /** Collapse: current layer being reverse-played */
-  private collapsingLayer = -1;
-  private collapseTimer = 0;
-  private staggerTimer = 0;
-  /** Build stagger timer */
-  private buildStaggerTimer = 0;
-  /** Segment IDs involved in the current layer's swaps (for flash) */
-  private flashSegIds = new Set<number>();
-  /** Per-segment random delay offsets for flight stagger (segId → seconds) */
-  private flightStaggerOffsets = new Map<number, number>();
-  /** Per-swap-pair stagger state for instant layers: pairIndex → offset delay */
-  private pairStaggerOffsets: number[] = [];
-  /** Swap pair segment ID groups for staggered flash: [segIdA, segIdB][] */
-  private staggeredPairs: [number, number][] = [];
-  /** Whether the current layer has already completed its flash phase */
-  private flashDoneForLayer = false;
-  /** Pre-collapse flash timer */
-  private preCollapseTimer = 0;
-
-  constructor(plan: CompiledPlan, config: ShuffleConfig) {
-    this.plan = plan;
-    this.config = config;
-    this.segmentCount = plan.mappingByLayer[0].length;
-    this.state = { currentLayer: 1, phase: "flight", phaseTime: 0 };
-  }
-
-  /** Reset for loop restart */
-  reset(plan: CompiledPlan): void {
-    Object.assign(this, {
-      plan,
-      settled: [],
-      settledByLayerCache: new Map(),
-      settledDirty: true,
-      blackFills: [],
-      collapsingLayer: -1,
-      collapseTimer: 0,
-      staggerTimer: 0,
-      buildStaggerTimer: 0,
-      flashSegIds: new Set<number>(),
-      flightStaggerOffsets: new Map<number, number>(),
-      pairStaggerOffsets: [],
-      staggeredPairs: [],
-      flashDoneForLayer: false,
-      preCollapseTimer: 0,
-      state: { currentLayer: 1, phase: "flight" as BuildPhase, phaseTime: 0 },
-    });
-  }
-
-  /** Advance the state machine by deltaTime seconds */
-  update(deltaTime: number): void {
-    switch (this.state.phase) {
-      case "flight":
-        this.updateFlight(deltaTime);
-        return;
-      case "flash":
-        this.updateFlash(deltaTime);
-        return;
-      case "hold":
-        this.updateHold(deltaTime);
-        return;
-      case "swipe":
-        this.updateSwipe(deltaTime);
-        return;
-      case "buildStagger":
-        this.updateBuildStagger(deltaTime);
-        return;
-      case "commit":
-        this.commitLayer();
-        return;
-      case "collapsing":
-        this.updateCollapse(deltaTime);
-        return;
-      case "holding":
-        this.updateHolding(deltaTime);
-        return;
-      case "preCollapse":
-        this.updatePreCollapse(deltaTime);
-        return;
-      case "complete":
-      case "idle":
-        return;
-    }
-  }
-
-  /** Whether the current layer should skip flight animation */
-  private isInstantLayer(): boolean {
-    return this.state.currentLayer < this.config.animationStartLayer;
-  }
-
-  private updateFlight(dt: number): void {
-    const layer = this.state.currentLayer;
-    const hasSettleLegs = (this.plan.legsByLayer[layer] ?? []).some(
-      (leg) => leg.mode === "settle",
-    );
-    const hasSwaps = (this.plan.swapsByLayer[layer] ?? []).length > 0;
-
-    // Instant layers: use flash → swipe transition if there are settle legs, otherwise commit
-    if (this.isInstantLayer()) {
-      if (hasSettleLegs) {
-        this.startStaggeredFlash();
-      } else {
-        this.state.phase = "commit";
-        this.state.phaseTime = 0;
-      }
-      return;
-    }
-
-    // Non-instant layers: show flash before flight (once per layer)
-    if (!this.flashDoneForLayer && hasSwaps && this.config.flashCount > 0) {
-      this.startStaggeredFlash();
-      return;
-    }
-
-    // Generate per-segment stagger offsets on first frame of flight
-    if (this.state.phaseTime === 0 && this.config.flightStagger > 0) {
-      this.flightStaggerOffsets.clear();
-      const legs = this.plan.legsByLayer[this.state.currentLayer] ?? [];
-      for (const leg of legs) {
-        this.flightStaggerOffsets.set(
-          leg.segId,
-          Math.random() * this.config.flightStagger,
-        );
-      }
-    }
-
-    this.state.phaseTime += dt;
-    const totalDuration = this.config.flightDuration + this.config.flightStagger;
-    if (this.state.phaseTime >= totalDuration) {
-      this.state.phase = "hold";
-      this.state.phaseTime = 0;
-      this.flightStaggerOffsets.clear();
-    }
-  }
-
-  /** Start staggered flash: each swap pair gets a random delay offset */
-  private startStaggeredFlash(): void {
-    const layer = this.state.currentLayer;
-    const prevMapping = this.plan.mappingByLayer[layer - 1];
-    const swaps = this.plan.swapsByLayer[layer] ?? [];
-
-    // Build per-pair data
-    this.staggeredPairs = swaps.map(([slotA, slotB]) => [
-      prevMapping[slotA],
-      prevMapping[slotB],
-    ]);
-    this.pairStaggerOffsets = this.staggeredPairs.map(
-      () => Math.random() * this.config.flightStagger,
-    );
-
-    // Collect all flash seg IDs (needed for getFlashInstances)
-    this.flashSegIds.clear();
-    for (const [a, b] of this.staggeredPairs) {
-      this.flashSegIds.add(a);
-      this.flashSegIds.add(b);
-    }
-
-    if (this.config.flashCount <= 0 && this.staggeredPairs.length === 0) {
-      this.state.phase = "commit";
-      this.state.phaseTime = 0;
-      return;
-    }
-
-    this.state.phase = "flash";
-    this.state.phaseTime = 0;
-  }
-
-  /** Total duration of flash cycles for one pair */
-  private getFlashDuration(): number {
-    return this.config.flashCount *
-      (this.config.flashOnDuration + this.config.flashOffDuration);
-  }
-
-  /** Get per-pair phase at current phaseTime: "waiting" | "flash" | "swipe" | "done" */
-  private getPairPhase(pairIndex: number): { phase: "waiting" | "flash" | "swipe" | "done"; localTime: number } {
-    const offset = this.pairStaggerOffsets[pairIndex] ?? 0;
-    const localTime = this.state.phaseTime - offset;
-    if (localTime < 0) return { phase: "waiting", localTime: 0 };
-
-    const flashDur = this.getFlashDuration();
-    if (localTime < flashDur) return { phase: "flash", localTime };
-
-    // Non-instant layers: flash only (no swipe), flight handles movement
-    if (!this.isInstantLayer()) {
-      return { phase: "done", localTime: 0 };
-    }
-
-    const swipeLocal = localTime - flashDur;
-    if (swipeLocal < this.config.flightDuration) return { phase: "swipe", localTime: swipeLocal };
-
-    return { phase: "done", localTime: swipeLocal };
-  }
-
-  private updateFlash(dt: number): void {
-    // Staggered mode: per-pair timeline
-    if (this.staggeredPairs.length > 0) {
-      this.state.phaseTime += dt;
-      // Check if all pairs are done
-      const allDone = this.staggeredPairs.every(
-        (_, i) => this.getPairPhase(i).phase === "done",
-      );
-      if (allDone) {
-        this.staggeredPairs = [];
-        this.pairStaggerOffsets = [];
-        this.flashSegIds.clear();
-
-        if (this.isInstantLayer()) {
-          // Instant layers: flash includes swipe, go to hold
-          this.state.phase = "hold";
-          this.state.phaseTime = 0;
-        } else {
-          // Non-instant layers: flash done, proceed to flight
-          this.flashDoneForLayer = true;
-          this.state.phase = "flight";
-          this.state.phaseTime = 0;
-        }
-      }
-      return;
-    }
-
-  }
-
-  private updateBuildStagger(dt: number): void {
-    this.buildStaggerTimer -= dt;
-    if (this.buildStaggerTimer <= 0) {
-      this.buildStaggerTimer = 0;
-      this.state.phase = "flight";
-      this.state.phaseTime = 0;
-    }
-  }
-
-  private updateSwipe(dt: number): void {
-    this.state.phaseTime += dt;
-    if (this.state.phaseTime >= this.config.flightDuration) {
-      this.state.phase = "hold";
-      this.state.phaseTime = 0;
-    }
-  }
-
-  private updateHold(dt: number): void {
-    this.state.phaseTime += dt;
-    if (this.state.phaseTime >= this.config.holdDuration) {
-      this.state.phase = "commit";
-      this.state.phaseTime = 0;
-    }
-  }
-
-  private commitLayer(): void {
-    const layer = this.state.currentLayer;
-
-    // Add all segments that have settled at or before this layer.
-    // This includes segments settling for the first time (settleLayer == layer)
-    // and segments that already settled in earlier layers (pass-through).
-    for (const leg of this.plan.legsByLayer[layer] ?? []) {
-      const lifecycle = this.plan.lifecycles[leg.segId];
-      if (lifecycle.settleLayer <= layer) {
-        this.settled.push({
-          segId: leg.segId,
-          x: leg.to[0],
-          y: leg.to[1],
-          z: leg.to[2],
-          w: leg.toSize[0],
-          h: leg.toSize[1],
-          wipeRole: 0,
-          isBboxOutline: 0,
-          swipeProgress: 0,
-          layer,
-        });
-        this.settledDirty = true;
-      }
-    }
-
-    // Add black fills for vacated slots on the source layer
-    const vacated = this.plan.vacatedByLayer[layer] ?? [];
-    for (const v of vacated) {
-      this.blackFills.push({
-        segId: v.segId,
-        x: v.position[0],
-        y: v.position[1],
-        z: v.position[2],
-        w: v.size[0],
-        h: v.size[1],
-        sourceLayer: layer,
-      });
-    }
-
-    // Advance to next layer or complete
-    if (layer >= this.config.maxGenerations) {
-      this.startPreCollapse();
-    } else {
-      this.state.currentLayer = layer + 1;
-      this.flashDoneForLayer = false;
-      if (this.config.buildStagger > 0) {
-        this.buildStaggerTimer = this.config.buildStagger;
-        this.state.phase = "buildStagger";
-        this.state.phaseTime = 0;
-      } else {
-        this.state.phase = "flight";
-        this.state.phaseTime = 0;
-      }
-    }
-  }
-
-  /** Start pre-collapse phase: flash all settled segments while camera moves */
-  private startPreCollapse(): void {
-    this.state.phase = "preCollapse";
-    this.state.phaseTime = 0;
-    this.preCollapseTimer = 0;
-  }
-
-  /** Total duration of pre-collapse phase: flash cycles + hold for camera movement */
-  private getPreCollapseDuration(): number {
-    const flashDur = this.config.flashCount *
-      (this.config.flashOnDuration + this.config.flashOffDuration);
-    // Allow at least holdAfterComplete for camera to finish moving
-    return Math.max(flashDur, this.config.holdAfterComplete);
-  }
-
-  private updatePreCollapse(dt: number): void {
-    this.preCollapseTimer += dt;
-    if (this.preCollapseTimer >= this.getPreCollapseDuration()) {
-      this.startCollapse();
-    }
-  }
-
-  /** Get pre-collapse flash instances: all settled segments as bbox outlines */
-  getPreCollapseFlashInstances(): SegmentInstance[] {
-    const flashDur = this.config.flashCount *
-      (this.config.flashOnDuration + this.config.flashOffDuration);
-
-    // After flash cycles end, show nothing (just camera moving)
-    if (this.preCollapseTimer >= flashDur) return [];
-
-    // Determine flash on/off
-    const cycleDuration = this.config.flashOnDuration + this.config.flashOffDuration;
-    const cyclePos = this.preCollapseTimer % cycleDuration;
-    const isVisible = cyclePos < this.config.flashOnDuration;
-    if (!isVisible) return [];
-
-    // Emit bbox outlines for all settled segments at their positions
-    const instances: SegmentInstance[] = [];
-    for (const s of this.settled) {
-      instances.push({
-        segId: s.segId,
-        x: s.x,
-        y: s.y,
-        z: s.z,
-        w: s.w,
-        h: s.h,
-        wipeRole: 0,
-        isBboxOutline: 1,
-        swipeProgress: 0,
-      });
-    }
-    return instances;
-  }
-
-  private startCollapse(): void {
-    this.state.phase = "collapsing";
-    this.collapsingLayer = this.config.maxGenerations;
-    this.collapseTimer = 0;
-    this.staggerTimer = 0;
-    // Clear settled — collapse uses legs for reverse-flight rendering
-    this.settled = [];
-    this.settledDirty = true;
-    // Clear all black fills at once when collapse starts
-    this.blackFills = [];
-  }
-
-  private updateCollapse(dt: number): void {
-    if (this.collapsingLayer <= 0) {
-      this.state.phase = "holding";
-      this.state.phaseTime = 0;
-      return;
-    }
-
-    if (this.staggerTimer > 0) {
-      this.staggerTimer -= dt;
-      return;
-    }
-
-    this.collapseTimer += dt;
-    if (this.collapseTimer >= this.config.collapseDuration) {
-      this.collapsingLayer -= 1;
-      if (this.collapsingLayer <= 0) {
-        this.state.phase = "holding";
-        this.state.phaseTime = 0;
-      } else {
-        this.collapseTimer = 0;
-        this.staggerTimer = this.config.collapseStagger;
-      }
-    }
-  }
-
-  private updateHolding(dt: number): void {
-    this.state.phaseTime += dt;
-    if (this.state.phaseTime >= this.config.holdAfterComplete) {
-      this.state.phase = "idle";
-    }
-  }
-
-  /** Get base layer instances (layer 0, always static) */
-  getBaseInstances(): SegmentInstance[] {
-    const instances: SegmentInstance[] = [];
-    const mapping = this.plan.mappingByLayer[0];
-    for (let i = 0; i < this.segmentCount; i++) {
-      instances.push({
-        segId: mapping[i],
-        x: 0, y: 0, z: 0, // will be filled by renderer from segments
-        w: 0, h: 0,
-        wipeRole: 0,
-        isBboxOutline: 0,
-        swipeProgress: 0,
-      });
-    }
-    return instances;
-  }
-
-  /** Get swipe progress (0..1) for non-staggered swipe */
-  private getSwipeProgress(): number {
-    if (this.state.phase !== "swipe") return 0;
-    return Math.min(this.state.phaseTime / this.config.flightDuration, 1);
-  }
-
-  /** Whether the flash phase is currently showing bboxes */
-  isFlashVisible(): boolean {
-    if (this.state.phase !== "flash") return false;
-    return this.staggeredPairs.some(
-      (_, i) => this.getPairPhase(i).phase === "flash",
-    );
-  }
-
-  /** Get segment IDs that are currently flashing */
-  getFlashSegIds(): ReadonlySet<number> {
-    return this.flashSegIds;
-  }
-
-  /** Get all active (in-flight + passing-through) segment instances */
-  getActiveInstances(): SegmentInstance[] {
-    const { currentLayer, phase, phaseTime } = this.state;
-
-    if (phase === "collapsing") {
-      return this.getCollapseInstances();
-    }
-
-    if (phase === "preCollapse") {
-      return this.getPreCollapseFlashInstances();
-    }
-
-    if (phase === "complete" || phase === "holding" || phase === "idle" || phase === "buildStagger") {
-      return [];
-    }
-
-    // Flash phase: show bbox outlines for flashing segments, hide others
-    if (phase === "flash") {
-      return this.getFlashInstances();
-    }
-
-    // Swipe phase: emit dual instances for swap pairs
-    if (phase === "swipe") {
-      return this.getSwipeInstances();
-    }
-
-    const instances: SegmentInstance[] = [];
-    // Non-instant layers: segments may be re-shuffled after initial settle,
-    // so don't skip them based on settled state
-    const skipSettledCheck = !this.isInstantLayer();
-    const settledIds = new Set<number>();
-    if (!skipSettledCheck) {
-      for (const s of this.settled) {
-        settledIds.add(s.segId);
-      }
-    }
-
-    // All legs for the current layer
-    const legs = this.plan.legsByLayer[currentLayer] ?? [];
-    for (const leg of legs) {
-      if (settledIds.has(leg.segId)) continue;
-      const offset = this.flightStaggerOffsets.get(leg.segId) ?? 0;
-      const t = phase === "flight"
-        ? Math.min(Math.max((phaseTime - offset) / this.config.flightDuration, 0), 1)
-        : 1; // hold phase: segments at destination
-      const eased = easeOutCubic(t);
-      instances.push({ ...interpolateLeg(leg, eased), wipeRole: 0, isBboxOutline: 0, swipeProgress: 0 });
-    }
-
-    return instances;
-  }
-
-  /** Get instances for the flash phase: per-pair staggered flash/swipe */
-  private getFlashInstances(): SegmentInstance[] {
-    return this.getStaggeredFlashSwipeInstances();
-  }
-
-  /** Get staggered flash+swipe instances: each pair independently progresses through flash → swipe → done */
-  private getStaggeredFlashSwipeInstances(): SegmentInstance[] {
-    const layer = this.state.currentLayer;
-    const instances: SegmentInstance[] = [];
-    const legs = this.plan.legsByLayer[layer] ?? [];
-    const prevMapping = this.plan.mappingByLayer[layer - 1];
-    const currMapping = this.plan.mappingByLayer[layer];
-    // Non-instant layers: flash happens before commit, so ignore settled state
-    // (segments may have settled in earlier layers but are being re-shuffled)
-    const skipSettledCheck = !this.isInstantLayer();
-    const settledIds = new Set<number>();
-    if (!skipSettledCheck) {
-      for (const s of this.settled) settledIds.add(s.segId);
-    }
-
-    // Build segId → leg lookup
-    const legBySegId = new Map<number, SegmentLeg>();
-    for (const leg of legs) legBySegId.set(leg.segId, leg);
-
-    // Segment IDs that are handled by a staggered pair (flash/swipe/done)
-    const handledSegIds = new Set<number>();
-
-    for (let i = 0; i < this.staggeredPairs.length; i++) {
-      const [segIdA, segIdB] = this.staggeredPairs[i];
-      const { phase: pairPhase, localTime } = this.getPairPhase(i);
-      handledSegIds.add(segIdA);
-      handledSegIds.add(segIdB);
-
-      if (pairPhase === "waiting") {
-        // Not started yet — show nothing for these segments
-        continue;
-      }
-
-      if (pairPhase === "flash") {
-        // Determine flash on/off from localTime within flash cycles
-        const cycleDuration = this.config.flashOnDuration + this.config.flashOffDuration;
-        const cyclePos = localTime % cycleDuration;
-        const isVisible = cyclePos < this.config.flashOnDuration;
-        if (!isVisible) continue;
-
-        for (const segId of [segIdA, segIdB]) {
-          const leg = legBySegId.get(segId);
-          if (!leg || settledIds.has(segId)) continue;
-          instances.push({
-            segId: leg.segId,
-            x: leg.from[0],
-            y: leg.from[1],
-            z: leg.from[2],
-            w: leg.fromSize[0],
-            h: leg.fromSize[1],
-            wipeRole: 0,
-            isBboxOutline: 1,
-            swipeProgress: 0,
-          });
-        }
-        continue;
-      }
-
-      // pairPhase === "swipe" or "done"
-      const swipeProgress = pairPhase === "done"
-        ? 1
-        : Math.min(localTime / this.config.flightDuration, 1);
-
-      for (const segId of [segIdA, segIdB]) {
-        const leg = legBySegId.get(segId);
-        if (!leg || settledIds.has(segId)) continue;
-        if (leg.mode === "pass") {
-          instances.push({
-            segId: leg.segId,
-            x: leg.to[0], y: leg.to[1], z: leg.to[2],
-            w: leg.toSize[0], h: leg.toSize[1],
-            wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
-          });
-        } else {
-          const destSlot = currMapping.indexOf(leg.segId);
-          const oldSegId = prevMapping[destSlot];
-          if (oldSegId === leg.segId) {
-            instances.push({
-              segId: leg.segId,
-              x: leg.to[0], y: leg.to[1], z: leg.to[2],
-              w: leg.toSize[0], h: leg.toSize[1],
-              wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
-            });
-          } else {
-            instances.push({
-              segId: oldSegId,
-              x: leg.to[0], y: leg.to[1], z: leg.to[2],
-              w: leg.toSize[0], h: leg.toSize[1],
-              wipeRole: swipeProgress >= 1 ? 0 : 1, isBboxOutline: 0,
-              swipeProgress,
-            });
-            instances.push({
-              segId: leg.segId,
-              x: leg.to[0], y: leg.to[1], z: leg.to[2],
-              w: leg.toSize[0], h: leg.toSize[1],
-              wipeRole: swipeProgress >= 1 ? 0 : 2, isBboxOutline: 0,
-              swipeProgress,
-            });
-          }
-        }
-      }
-    }
-
-    // Pass-through legs not involved in any pair: show at destination
-    for (const leg of legs) {
-      if (handledSegIds.has(leg.segId) || settledIds.has(leg.segId)) continue;
-      instances.push({
-        segId: leg.segId,
-        x: leg.to[0], y: leg.to[1], z: leg.to[2],
-        w: leg.toSize[0], h: leg.toSize[1],
-        wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
-      });
-    }
-
-    return instances;
-  }
-
-  /** Get instances for the swipe phase: old+new dual instances at swap slots */
-  private getSwipeInstances(): SegmentInstance[] {
-    const layer = this.state.currentLayer;
-    const instances: SegmentInstance[] = [];
-    const settledIds = new Set<number>();
-    const progress = this.getSwipeProgress();
-
-    for (const s of this.settled) {
-      settledIds.add(s.segId);
-    }
-
-    const legs = this.plan.legsByLayer[layer] ?? [];
-    const prevMapping = this.plan.mappingByLayer[layer - 1];
-    const currMapping = this.plan.mappingByLayer[layer];
-
-    for (const leg of legs) {
-      if (settledIds.has(leg.segId)) continue;
-
-      if (leg.mode === "pass") {
-        instances.push({
-          segId: leg.segId,
-          x: leg.to[0], y: leg.to[1], z: leg.to[2],
-          w: leg.toSize[0], h: leg.toSize[1],
-          wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
-        });
-      } else {
-        const destSlot = currMapping.indexOf(leg.segId);
-        const oldSegId = prevMapping[destSlot];
-
-        if (oldSegId === leg.segId) {
-          instances.push({
-            segId: leg.segId,
-            x: leg.to[0], y: leg.to[1], z: leg.to[2],
-            w: leg.toSize[0], h: leg.toSize[1],
-            wipeRole: 0, isBboxOutline: 0, swipeProgress: 0,
-          });
-        } else {
-          instances.push({
-            segId: oldSegId,
-            x: leg.to[0], y: leg.to[1], z: leg.to[2],
-            w: leg.toSize[0], h: leg.toSize[1],
-            wipeRole: 1, isBboxOutline: 0, swipeProgress: progress,
-          });
-          instances.push({
-            segId: leg.segId,
-            x: leg.to[0], y: leg.to[1], z: leg.to[2],
-            w: leg.toSize[0], h: leg.toSize[1],
-            wipeRole: 2, isBboxOutline: 0, swipeProgress: progress,
-          });
-        }
-      }
-    }
-
-    return instances;
-  }
-
-  /** Get reverse-flying instances during collapse */
-  private getCollapseInstances(): SegmentInstance[] {
-    const instances: SegmentInstance[] = [];
-    const progress = Math.min(this.collapseTimer / this.config.collapseDuration, 1);
-    const eased = easeOutCubic(progress);
-    const animatingSegIds = new Set<number>();
-
-    // Current collapsing layer: only reverse-fly segments that actually
-    // settled at or before this layer (not future-settle pass-throughs)
-    const legs = this.plan.legsByLayer[this.collapsingLayer] ?? [];
-    for (const leg of legs) {
-      const lifecycle = this.plan.lifecycles[leg.segId];
-      if (lifecycle.settleLayer > this.collapsingLayer) continue;
-      animatingSegIds.add(leg.segId);
-      instances.push(interpolateLegReverse(leg, eased));
-    }
-
-    // Segments settled below the current collapsing layer stay fixed at
-    // their settle-layer destination (using the leg that targets their settleLayer).
-    for (const lifecycle of this.plan.lifecycles) {
-      if (lifecycle.settleLayer >= this.collapsingLayer) continue;
-      if (animatingSegIds.has(lifecycle.segId)) continue;
-
-      // Find the leg targeting the settle layer
-      const settledLeg = lifecycle.legs.find(
-        (l) => l.toLayer === lifecycle.settleLayer,
-      );
-      if (!settledLeg) continue;
-
-      instances.push({
-        segId: lifecycle.segId,
-        x: settledLeg.to[0],
-        y: settledLeg.to[1],
-        z: settledLeg.to[2],
-        w: settledLeg.toSize[0],
-        h: settledLeg.toSize[1],
-        wipeRole: 0,
-        isBboxOutline: 0,
-        swipeProgress: 0,
-      });
-    }
-
-    return instances;
-  }
-
-  /** Get all settled segment instances (empty during collapse — handled by getActiveInstances) */
-  getSettledInstances(): SegmentInstance[] {
-    return this.settled;
-  }
-
-  /** Get settled instances grouped by layer (cached, rebuilds only when dirty) */
-  getSettledByLayer(): Map<number, SegmentInstance[]> {
-    if (!this.settledDirty) return this.settledByLayerCache;
-
-    this.settledByLayerCache.clear();
-    for (const s of this.settled) {
-      let arr = this.settledByLayerCache.get(s.layer);
-      if (!arr) {
-        arr = [];
-        this.settledByLayerCache.set(s.layer, arr);
-      }
-      arr.push(s);
-    }
-    this.settledDirty = false;
-    return this.settledByLayerCache;
-  }
-
-  /** Get all active black fill instances */
-  getBlackFillInstances(): BlackFillInstance[] {
-    return this.blackFills;
-  }
-
-  /** Get current layer being built */
-  getCurrentLayer(): number {
-    return this.state.currentLayer;
-  }
-
-  /** Get the connection line data for all built layers */
-  getConnectionLines(): Array<{ from: [number, number, number]; to: [number, number, number] }> {
-    const lines: Array<{ from: [number, number, number]; to: [number, number, number] }> = [];
-    const { currentLayer, phase, phaseTime } = this.state;
-
-    if (phase === "collapsing") {
-      return this.getCollapseLines();
-    }
-
-    if (phase === "holding" || phase === "idle" || phase === "buildStagger") {
-      return [];
-    }
-
-    // During flash phase, don't show connection lines (only bbox outlines visible)
-    if (phase === "flash") {
-      return [];
-    }
-
-    const maxBuiltLayer = phase === "flight" || phase === "hold" || phase === "commit" || phase === "swipe"
-      ? currentLayer
-      : this.config.maxGenerations;
-
-    for (let layer = 1; layer <= maxBuiltLayer; layer++) {
-      const legs = this.plan.legsByLayer[layer] ?? [];
-      const isCurrentLayer = layer === currentLayer && (phase === "flight" || phase === "hold");
-
-      for (const leg of legs) {
-        if (leg.mode === "pass") continue;
-
-        if (isCurrentLayer) {
-          const offset = this.flightStaggerOffsets.get(leg.segId) ?? 0;
-          const segT = phase === "flight"
-            ? easeOutCubic(Math.min(Math.max((phaseTime - offset) / this.config.flightDuration, 0), 1))
-            : 1;
-          const inst = interpolateLeg(leg, segT);
-          lines.push({
-            from: leg.from,
-            to: [inst.x, inst.y, inst.z],
-          });
-        } else if (layer < currentLayer || phase === "complete") {
-          lines.push({
-            from: leg.from,
-            to: leg.to,
-          });
-        }
-      }
-    }
-
-    return lines;
-  }
-
-  /** Get connection lines during collapse (reverse animation) */
-  private getCollapseLines(): Array<{ from: [number, number, number]; to: [number, number, number] }> {
-    const lines: Array<{ from: [number, number, number]; to: [number, number, number] }> = [];
-    const progress = Math.min(this.collapseTimer / this.config.collapseDuration, 1);
-    const t = easeOutCubic(progress);
-
-    // Current collapsing layer: animated reverse lines
-    const collapseLegs = this.plan.legsByLayer[this.collapsingLayer] ?? [];
-    for (const leg of collapseLegs) {
-      if (leg.mode === "pass") continue;
-      const inst = interpolateLegReverse(leg, t);
-      lines.push({
-        from: [leg.to[0], leg.to[1], leg.to[2]],
-        to: [inst.x, inst.y, inst.z],
-      });
-    }
-
-    // Layers below: still showing static lines
-    for (let layer = this.collapsingLayer - 1; layer >= 1; layer--) {
-      const layerLegs = this.plan.legsByLayer[layer] ?? [];
-      for (const leg of layerLegs) {
-        if (leg.mode === "pass") continue;
-        lines.push({
-          from: leg.from,
-          to: leg.to,
-        });
-      }
-    }
-
-    return lines;
-  }
+	readonly config: ShuffleConfig;
+	readonly plan: CompiledPlan;
+	readonly segmentCount: number;
+
+	state: BuildState;
+
+	private settled: (SegmentInstance & { layer: number })[] = [];
+	private settledByLayerCache = new Map<number, SegmentInstance[]>();
+	private settledDirty = true;
+	private blackFills: BlackFillInstance[] = [];
+	private collapsingLayer = -1;
+	private collapseTimer = 0;
+	private collapseStaggerTimer = 0;
+
+	constructor(plan: CompiledPlan, config: ShuffleConfig) {
+		this.plan = plan;
+		this.config = config;
+		this.segmentCount = plan.mappingByLayer[0].length;
+		this.state = { currentLayer: 1, phase: "swipe", phaseTime: 0 };
+		this.syncBlackFillsForCurrentLayer();
+	}
+
+	reset(plan: CompiledPlan): void {
+		Object.assign(this, {
+			plan,
+			settled: [],
+			settledByLayerCache: new Map(),
+			settledDirty: true,
+			blackFills: [],
+			collapsingLayer: -1,
+			collapseTimer: 0,
+			collapseStaggerTimer: 0,
+			state: { currentLayer: 1, phase: "swipe" as BuildPhase, phaseTime: 0 },
+		});
+		this.syncBlackFillsForCurrentLayer();
+	}
+
+	update(deltaTime: number): void {
+		switch (this.state.phase) {
+			case "swipe":
+				this.updateSwipe(deltaTime);
+				return;
+			case "hold":
+				this.updateHold(deltaTime);
+				return;
+			case "commit":
+				this.commitLayer();
+				return;
+			case "collapsing":
+				this.updateCollapse(deltaTime);
+				return;
+			case "holding":
+				this.updateHolding(deltaTime);
+				return;
+			case "preCollapse":
+				this.updatePreCollapse(deltaTime);
+				return;
+			case "complete":
+			case "idle":
+				return;
+		}
+	}
+
+	private updateSwipe(dt: number): void {
+		this.state.phaseTime += dt;
+		if (this.state.phaseTime >= this.config.swipeDuration) {
+			this.state.phase = "hold";
+			this.state.phaseTime = 0;
+		}
+	}
+
+	private updateHold(dt: number): void {
+		this.state.phaseTime += dt;
+		if (this.state.phaseTime >= this.config.holdDuration) {
+			this.state.phase = "commit";
+			this.state.phaseTime = 0;
+		}
+	}
+
+	private commitLayer(): void {
+		const layer = this.state.currentLayer;
+		for (const leg of this.plan.legsByLayer[layer] ?? []) {
+			const lifecycle = this.plan.lifecycles[leg.segId];
+			if (lifecycle.settleLayer <= layer) {
+				this.settled.push({
+					segId: leg.segId,
+					x: leg.to[0],
+					y: leg.to[1],
+					z: leg.to[2],
+					w: leg.toSize[0],
+					h: leg.toSize[1],
+					wipeRole: 0,
+					isBboxOutline: 0,
+					swipeProgress: 0,
+					layer,
+				});
+			}
+		}
+		this.settledDirty = true;
+
+		if (layer >= this.config.maxGenerations) {
+			this.startPreCollapse();
+			return;
+		}
+
+		this.state.currentLayer = layer + 1;
+		this.state.phase = "swipe";
+		this.state.phaseTime = 0;
+		this.syncBlackFillsForCurrentLayer();
+	}
+
+	private startPreCollapse(): void {
+		this.state.phase = "preCollapse";
+		this.state.phaseTime = 0;
+		this.blackFills = [];
+	}
+
+	private updatePreCollapse(dt: number): void {
+		this.state.phaseTime += dt;
+		if (this.state.phaseTime >= this.config.holdAfterComplete) {
+			this.startCollapse();
+		}
+	}
+
+	private startCollapse(): void {
+		this.state.phase = "collapsing";
+		this.collapsingLayer = this.config.maxGenerations;
+		this.collapseTimer = 0;
+		this.collapseStaggerTimer = 0;
+		this.settled = [];
+		this.settledDirty = true;
+		this.blackFills = [];
+	}
+
+	private updateCollapse(dt: number): void {
+		if (this.collapsingLayer <= 0) {
+			this.state.phase = "holding";
+			this.state.phaseTime = 0;
+			this.collapseStaggerTimer = 0;
+			return;
+		}
+
+		if (this.collapseStaggerTimer > 0) {
+			this.collapseStaggerTimer -= dt;
+			return;
+		}
+
+		this.collapseTimer += dt;
+		if (this.collapseTimer >= this.config.collapseDuration) {
+			this.collapsingLayer -= 1;
+			if (this.collapsingLayer <= 0) {
+				this.state.phase = "holding";
+				this.state.phaseTime = 0;
+			} else {
+				this.collapseTimer = 0;
+				this.collapseStaggerTimer = this.config.collapseStagger;
+			}
+		}
+	}
+
+	private updateHolding(dt: number): void {
+		this.state.phaseTime += dt;
+		if (this.state.phaseTime >= this.config.holdAfterComplete) {
+			this.state.phase = "idle";
+		}
+	}
+
+	private syncBlackFillsForCurrentLayer(): void {
+		const layer = this.state.currentLayer;
+		const vacated = this.plan.vacatedByLayer[layer] ?? [];
+		this.blackFills = vacated.map((v) => ({
+			segId: v.segId,
+			x: v.position[0],
+			y: v.position[1],
+			z: v.position[2],
+			w: v.size[0],
+			h: v.size[1],
+			sourceLayer: layer,
+		}));
+	}
+
+	getBaseInstances(): SegmentInstance[] {
+		const instances: SegmentInstance[] = [];
+		const mapping = this.plan.mappingByLayer[0];
+		for (let i = 0; i < this.segmentCount; i++) {
+			instances.push({
+				segId: mapping[i],
+				x: 0,
+				y: 0,
+				z: 0,
+				w: 0,
+				h: 0,
+				wipeRole: 0,
+				isBboxOutline: 0,
+				swipeProgress: 0,
+			});
+		}
+		return instances;
+	}
+
+	private getSwipeProgress(): number {
+		if (this.state.phase !== "swipe") return 1;
+		return Math.min(this.state.phaseTime / this.config.swipeDuration, 1);
+	}
+
+	getActiveInstances(): SegmentInstance[] {
+		const { currentLayer, phase } = this.state;
+
+		if (phase === "collapsing") return this.getCollapseInstances();
+		if (
+			phase === "preCollapse" ||
+			phase === "holding" ||
+			phase === "idle" ||
+			phase === "complete"
+		) {
+			return [];
+		}
+
+		const legs = this.plan.legsByLayer[currentLayer] ?? [];
+		const prevMapping = this.plan.mappingByLayer[currentLayer - 1];
+		const currMapping = this.plan.mappingByLayer[currentLayer];
+		const swipeProgress = this.getSwipeProgress();
+
+		const instances: SegmentInstance[] = [];
+		for (const leg of legs) {
+			if (leg.mode === "pass") {
+				instances.push({
+					segId: leg.segId,
+					x: leg.to[0],
+					y: leg.to[1],
+					z: leg.to[2],
+					w: leg.toSize[0],
+					h: leg.toSize[1],
+					wipeRole: 0,
+					isBboxOutline: 0,
+					swipeProgress: 0,
+				});
+				continue;
+			}
+
+			const destSlot = currMapping.indexOf(leg.segId);
+			const oldSegId = prevMapping[destSlot];
+			if (oldSegId === leg.segId || swipeProgress >= 1 || phase !== "swipe") {
+				instances.push({
+					segId: leg.segId,
+					x: leg.to[0],
+					y: leg.to[1],
+					z: leg.to[2],
+					w: leg.toSize[0],
+					h: leg.toSize[1],
+					wipeRole: 0,
+					isBboxOutline: 0,
+					swipeProgress: 0,
+				});
+			} else {
+				instances.push({
+					segId: oldSegId,
+					x: leg.to[0],
+					y: leg.to[1],
+					z: leg.to[2],
+					w: leg.toSize[0],
+					h: leg.toSize[1],
+					wipeRole: 1,
+					isBboxOutline: 0,
+					swipeProgress,
+				});
+				instances.push({
+					segId: leg.segId,
+					x: leg.to[0],
+					y: leg.to[1],
+					z: leg.to[2],
+					w: leg.toSize[0],
+					h: leg.toSize[1],
+					wipeRole: 2,
+					isBboxOutline: 0,
+					swipeProgress,
+				});
+			}
+		}
+
+		return instances;
+	}
+
+	private getCollapseInstances(): SegmentInstance[] {
+		const instances: SegmentInstance[] = [];
+		const progress = Math.min(
+			this.collapseTimer / this.config.collapseDuration,
+			1,
+		);
+		const eased = easeOutCubic(progress);
+		const animatingSegIds = new Set<number>();
+
+		const legs = this.plan.legsByLayer[this.collapsingLayer] ?? [];
+		for (const leg of legs) {
+			const lifecycle = this.plan.lifecycles[leg.segId];
+			if (lifecycle.settleLayer > this.collapsingLayer) continue;
+			animatingSegIds.add(leg.segId);
+			instances.push(interpolateLegReverse(leg, eased));
+		}
+
+		for (const lifecycle of this.plan.lifecycles) {
+			if (lifecycle.settleLayer >= this.collapsingLayer) continue;
+			if (animatingSegIds.has(lifecycle.segId)) continue;
+			const settledLeg = lifecycle.legs.find(
+				(l) => l.toLayer === lifecycle.settleLayer,
+			);
+			if (!settledLeg) continue;
+			instances.push({
+				segId: lifecycle.segId,
+				x: settledLeg.to[0],
+				y: settledLeg.to[1],
+				z: settledLeg.to[2],
+				w: settledLeg.toSize[0],
+				h: settledLeg.toSize[1],
+				wipeRole: 0,
+				isBboxOutline: 0,
+				swipeProgress: 0,
+			});
+		}
+
+		return instances;
+	}
+
+	getSettledInstances(): SegmentInstance[] {
+		return this.settled;
+	}
+
+	getSettledByLayer(): Map<number, SegmentInstance[]> {
+		if (!this.settledDirty) return this.settledByLayerCache;
+
+		this.settledByLayerCache.clear();
+		for (const s of this.settled) {
+			let arr = this.settledByLayerCache.get(s.layer);
+			if (!arr) {
+				arr = [];
+				this.settledByLayerCache.set(s.layer, arr);
+			}
+			arr.push(s);
+		}
+		this.settledDirty = false;
+		return this.settledByLayerCache;
+	}
+
+	getBlackFillInstances(): BlackFillInstance[] {
+		if (this.state.phase !== "swipe") return [];
+		return this.blackFills;
+	}
+
+	getCurrentLayer(): number {
+		return this.state.currentLayer;
+	}
+
+	getConnectionLines(): ConnectionLine[] {
+		if (this.state.phase !== "collapsing") return [];
+		return this.getCollapseLines();
+	}
+
+	private getCollapseLines(): ConnectionLine[] {
+		const lines: ConnectionLine[] = [];
+		const progress = Math.min(
+			this.collapseTimer / this.config.collapseDuration,
+			1,
+		);
+		const t = easeOutCubic(progress);
+
+		const collapseLegs = this.plan.legsByLayer[this.collapsingLayer] ?? [];
+		for (const leg of collapseLegs) {
+			if (!legMoves(leg)) continue;
+			const inst = interpolateLegReverse(leg, t);
+			lines.push({
+				from: [leg.to[0], leg.to[1], leg.to[2]],
+				to: [inst.x, inst.y, inst.z],
+			});
+		}
+
+		for (let layer = this.collapsingLayer - 1; layer >= 1; layer--) {
+			const layerLegs = this.plan.legsByLayer[layer] ?? [];
+			for (const leg of layerLegs) {
+				if (!legMoves(leg)) continue;
+				lines.push({ from: leg.from, to: leg.to });
+			}
+		}
+
+		return lines;
+	}
+}
+
+function legMoves(leg: SegmentLeg): boolean {
+	return (
+		leg.from[0] !== leg.to[0] ||
+		leg.from[1] !== leg.to[1] ||
+		leg.from[2] !== leg.to[2]
+	);
 }
 
 function easeOutCubic(t: number): number {
-  return 1 - (1 - t) ** 3;
+	return 1 - (1 - t) ** 3;
 }
 
-function interpolateLeg(leg: SegmentLeg, t: number): SegmentInstance {
-  return {
-    segId: leg.segId,
-    x: leg.from[0] + (leg.to[0] - leg.from[0]) * t,
-    y: leg.from[1] + (leg.to[1] - leg.from[1]) * t,
-    z: leg.from[2] + (leg.to[2] - leg.from[2]) * t,
-    w: leg.fromSize[0] + (leg.toSize[0] - leg.fromSize[0]) * t,
-    h: leg.fromSize[1] + (leg.toSize[1] - leg.fromSize[1]) * t,
-    wipeRole: 0,
-    isBboxOutline: 0,
-    swipeProgress: 0,
-  };
-}
-
-/** Reverse interpolation: to → from */
 function interpolateLegReverse(leg: SegmentLeg, t: number): SegmentInstance {
-  return {
-    segId: leg.segId,
-    x: leg.to[0] + (leg.from[0] - leg.to[0]) * t,
-    y: leg.to[1] + (leg.from[1] - leg.to[1]) * t,
-    z: leg.to[2] + (leg.from[2] - leg.to[2]) * t,
-    w: leg.toSize[0] + (leg.fromSize[0] - leg.toSize[0]) * t,
-    h: leg.toSize[1] + (leg.fromSize[1] - leg.toSize[1]) * t,
-    wipeRole: 0,
-    isBboxOutline: 0,
-    swipeProgress: 0,
-  };
+	return {
+		segId: leg.segId,
+		x: leg.to[0] + (leg.from[0] - leg.to[0]) * t,
+		y: leg.to[1] + (leg.from[1] - leg.to[1]) * t,
+		z: leg.to[2] + (leg.from[2] - leg.to[2]) * t,
+		w: leg.toSize[0] + (leg.fromSize[0] - leg.toSize[0]) * t,
+		h: leg.toSize[1] + (leg.fromSize[1] - leg.toSize[1]) * t,
+		wipeRole: 0,
+		isBboxOutline: 0,
+		swipeProgress: 0,
+	};
 }

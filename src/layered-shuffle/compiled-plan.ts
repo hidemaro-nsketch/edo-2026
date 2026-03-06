@@ -1,133 +1,124 @@
 import {
-  computeContainedSize,
-  getSlotWorldPos,
-  getSlotWorldSize,
+	computeContainedSize,
+	getSlotWorldPos,
+	getSlotWorldSize,
 } from "../sakura/constants";
 import type { SegmentInfo } from "../sakura/types";
 import type {
-  CompiledPlan,
-  SegmentLeg,
-  SegmentLifecycle,
-  ShuffleConfig,
-  SwapPair,
-  VacatedSlot,
+	CompiledPlan,
+	SegmentLeg,
+	SegmentLifecycle,
+	ShuffleConfig,
+	SwapPair,
+	VacatedSlot,
 } from "./types";
 
 /**
  * Compute bounding box area for a slot (uses the segment geometry at that slot index).
  */
 function slotArea(segments: SegmentInfo[], slotIndex: number): number {
-  const seg = segments[slotIndex];
-  return seg.bboxInSource[2] * seg.bboxInSource[3];
+	const seg = segments[slotIndex];
+	return seg.bboxInSource[2] * seg.bboxInSource[3];
+}
+
+function slotsOverlap(
+	segments: SegmentInfo[],
+	slotA: number,
+	slotB: number,
+): boolean {
+	const a = segments[slotA].bboxInSource;
+	const b = segments[slotB].bboxInSource;
+
+	const ax1 = a[0];
+	const ay1 = a[1];
+	const ax2 = a[0] + a[2];
+	const ay2 = a[1] + a[3];
+
+	const bx1 = b[0];
+	const by1 = b[1];
+	const bx2 = b[0] + b[2];
+	const by2 = b[1] + b[3];
+
+	return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
 }
 
 /**
  * Generate swap pairs for a given generation.
- * Swap count increases progressively using a t^1.5 curve.
+ * Swap count is fixed per layer for stable, predictable transitions.
  * Pairs slots with similar bounding box areas. The neighbourhood radius
  * widens as generations progress: early layers pair very similar sizes,
  * later layers allow larger size differences for more variety.
  * No slot appears in more than one pair per generation.
  */
 function generateSwapPairs(
-  gen: number,
-  maxGenerations: number,
-  segments: SegmentInfo[],
+	gen: number,
+	maxGenerations: number,
+	segments: SegmentInfo[],
 ): SwapPair[] {
-  const segmentCount = segments.length;
-  const maxSwaps = Math.floor(segmentCount / 2);
-  const t = maxGenerations <= 1 ? 1 : (gen - 1) / (maxGenerations - 1);
-  const swapCount = Math.min(
-    Math.round(1 + (maxSwaps - 1) * t ** 1.5),
-    maxSwaps,
-  );
+	const SWAPS_PER_LAYER = 1;
+	const segmentCount = segments.length;
+	const maxSwaps = Math.floor(segmentCount / 2);
+	const t = maxGenerations <= 1 ? 1 : (gen - 1) / (maxGenerations - 1);
+	const swapCount = Math.min(SWAPS_PER_LAYER, maxSwaps);
 
-  // Sort slot indices by bbox area
-  const sorted = Array.from({ length: segmentCount }, (_, i) => i);
-  sorted.sort((a, b) => slotArea(segments, a) - slotArea(segments, b));
+	// Sort slot indices by bbox area
+	const sorted = Array.from({ length: segmentCount }, (_, i) => i);
+	sorted.sort((a, b) => slotArea(segments, a) - slotArea(segments, b));
 
-  // Neighbourhood radius: 1 (strict adjacent) at gen 1, up to half the list at max gen
-  const maxRadius = Math.max(1, Math.floor(segmentCount / 2));
-  const radius = Math.max(1, Math.round(1 + (maxRadius - 1) * t));
+	// Active size window slides from small -> large as layers progress.
+	// Early layers mostly affect smaller segments; later layers shift to larger ones.
+	const minWindow = Math.min(
+		segmentCount,
+		Math.max(2, Math.round(segmentCount * 0.3)),
+	);
+	const windowSize = Math.max(2, minWindow);
+	const start = Math.round((segmentCount - windowSize) * t);
+	const active = sorted.slice(start, start + windowSize);
 
-  // Greedy random pairing within neighbourhood
-  const used = new Set<number>();
-  const pairs: SwapPair[] = [];
+	// Neighbourhood radius: 1 (strict adjacent) at gen 1, up to half the active list at max gen
+	const maxRadius = Math.max(1, Math.floor(active.length / 2));
+	const radius = Math.max(1, Math.round(1 + (maxRadius - 1) * t));
 
-  // Randomize traversal order so pairs vary across layers
-  const order = Array.from({ length: sorted.length }, (_, i) => i);
-  for (let i = order.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [order[i], order[j]] = [order[j], order[i]];
-  }
+	// Greedy random pairing within neighbourhood
+	const used = new Set<number>();
+	const pairs: SwapPair[] = [];
 
-  for (const sortedIdx of order) {
-    if (pairs.length >= swapCount) break;
-    const slotA = sorted[sortedIdx];
-    if (used.has(slotA)) continue;
+	// Randomize traversal order so pairs vary across layers
+	const order = Array.from({ length: active.length }, (_, i) => i);
+	for (let i = order.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[order[i], order[j]] = [order[j], order[i]];
+	}
 
-    // Pick a random partner within the neighbourhood radius in sorted order
-    const lo = Math.max(0, sortedIdx - radius);
-    const hi = Math.min(sorted.length - 1, sortedIdx + radius);
+	for (const sortedIdx of order) {
+		if (pairs.length >= swapCount) break;
+		const slotA = active[sortedIdx];
+		if (used.has(slotA)) continue;
 
-    // Collect eligible neighbours
-    const candidates: number[] = [];
-    for (let k = lo; k <= hi; k++) {
-      if (k === sortedIdx) continue;
-      if (!used.has(sorted[k])) candidates.push(k);
-    }
-    if (candidates.length === 0) continue;
+		// Pick a random partner within the neighbourhood radius in sorted order
+		const lo = Math.max(0, sortedIdx - radius);
+		const hi = Math.min(active.length - 1, sortedIdx + radius);
 
-    const pick = candidates[Math.floor(Math.random() * candidates.length)];
-    const slotB = sorted[pick];
+		// Collect eligible neighbours
+		const candidates: number[] = [];
+		for (let k = lo; k <= hi; k++) {
+			if (k === sortedIdx) continue;
+			const slotB = active[k];
+			if (used.has(slotB)) continue;
+			if (slotsOverlap(segments, slotA, slotB)) continue;
+			candidates.push(k);
+		}
+		if (candidates.length === 0) continue;
 
-    used.add(slotA);
-    used.add(slotB);
-    pairs.push([slotA, slotB]);
-  }
+		const pick = candidates[Math.floor(Math.random() * candidates.length)];
+		const slotB = active[pick];
 
-  return pairs;
-}
+		used.add(slotA);
+		used.add(slotB);
+		pairs.push([slotA, slotB]);
+	}
 
-/**
- * Generate a full random permutation of all slots, decomposed into swap pairs.
- * Used for non-instant layers where every segment moves to a new position.
- * Produces a derangement (no element stays in place) when possible.
- */
-function generateFullPermutation(segmentCount: number): SwapPair[] {
-  // Build a derangement: random permutation where no element maps to itself
-  const perm = Array.from({ length: segmentCount }, (_, i) => i);
-
-  // Sattolo's algorithm for derangement
-  for (let i = segmentCount - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * i); // 0..i-1 (never i itself)
-    [perm[i], perm[j]] = [perm[j], perm[i]];
-  }
-
-  // Decompose permutation cycles into swap pairs
-  const visited = new Set<number>();
-  const pairs: SwapPair[] = [];
-
-  for (let start = 0; start < segmentCount; start++) {
-    if (visited.has(start) || perm[start] === start) continue;
-
-    // Extract cycle
-    const cycle: number[] = [];
-    let cur = start;
-    while (!visited.has(cur)) {
-      visited.add(cur);
-      cycle.push(cur);
-      cur = perm[cur];
-    }
-
-    // Decompose cycle into adjacent transpositions:
-    // cycle (a, b, c, d) = swap(a,d), swap(a,c), swap(a,b)
-    for (let i = cycle.length - 1; i >= 1; i--) {
-      pairs.push([cycle[0], cycle[i]]);
-    }
-  }
-
-  return pairs;
+	return pairs;
 }
 
 /**
@@ -135,165 +126,162 @@ function generateFullPermutation(segmentCount: number): SwapPair[] {
  * flight legs, and per-layer data for the entire sequence.
  */
 export function compilePlan(
-  segments: SegmentInfo[],
-  config: ShuffleConfig,
+	segments: SegmentInfo[],
+	config: ShuffleConfig,
 ): CompiledPlan {
-  const count = segments.length;
-  const maxGen = config.maxGenerations;
+	const count = segments.length;
+	const maxGen = config.maxGenerations;
 
-  // Generate all swap pairs for all layers
-  const swapsByLayer: SwapPair[][] = [[]]; // layer 0 has no swaps
-  for (let layer = 1; layer <= maxGen; layer++) {
-    if (layer >= config.animationStartLayer) {
-      // Non-instant layers: full random permutation of all segments
-      swapsByLayer.push(generateFullPermutation(count));
-    } else {
-      swapsByLayer.push(generateSwapPairs(layer, maxGen, segments));
-    }
-  }
+	// Generate all swap pairs for all layers
+	const swapsByLayer: SwapPair[][] = [[]]; // layer 0 has no swaps
+	for (let layer = 1; layer <= maxGen; layer++) {
+		swapsByLayer.push(generateSwapPairs(layer, maxGen, segments));
+	}
 
-  // Build slot-to-segment mappings for each layer
-  const mappingByLayer: number[][] = [];
-  mappingByLayer.push(Array.from({ length: count }, (_, i) => i)); // layer 0: identity
+	// Build slot-to-segment mappings for each layer
+	const mappingByLayer: number[][] = [];
+	mappingByLayer.push(Array.from({ length: count }, (_, i) => i)); // layer 0: identity
 
-  for (let layer = 1; layer <= maxGen; layer++) {
-    const prev = [...mappingByLayer[layer - 1]];
-    for (const [slotA, slotB] of swapsByLayer[layer]) {
-      const tmp = prev[slotA];
-      prev[slotA] = prev[slotB];
-      prev[slotB] = tmp;
-    }
-    mappingByLayer.push(prev);
-  }
+	for (let layer = 1; layer <= maxGen; layer++) {
+		const prev = [...mappingByLayer[layer - 1]];
+		for (const [slotA, slotB] of swapsByLayer[layer]) {
+			const tmp = prev[slotA];
+			prev[slotA] = prev[slotB];
+			prev[slotB] = tmp;
+		}
+		mappingByLayer.push(prev);
+	}
 
-  // For each segment, determine which layer it first participates in a swap
-  // settleLayer[segId] = first layer where this segment is in a swap pair
-  const settleLayer = new Array<number>(count).fill(maxGen); // default: last layer
+	// For each segment, determine which layer it first participates in a swap
+	// settleLayer[segId] = first layer where this segment is in a swap pair
+	const settleLayer = new Array<number>(count).fill(maxGen); // default: last layer
 
-  for (let layer = 1; layer <= maxGen; layer++) {
-    const swappedSlots = new Set<number>();
-    for (const [slotA, slotB] of swapsByLayer[layer]) {
-      swappedSlots.add(slotA);
-      swappedSlots.add(slotB);
-    }
+	for (let layer = 1; layer <= maxGen; layer++) {
+		const swappedSlots = new Set<number>();
+		for (const [slotA, slotB] of swapsByLayer[layer]) {
+			swappedSlots.add(slotA);
+			swappedSlots.add(slotB);
+		}
 
-    // Check which segments (by ID) are in swapped slots at prev layer
-    const prevMapping = mappingByLayer[layer - 1];
-    for (const slot of swappedSlots) {
-      const segId = prevMapping[slot];
-      if (settleLayer[segId] > layer) {
-        settleLayer[segId] = layer;
-      }
-    }
-  }
+		// Check which segments (by ID) are in swapped slots at prev layer
+		const prevMapping = mappingByLayer[layer - 1];
+		for (const slot of swappedSlots) {
+			const segId = prevMapping[slot];
+			if (settleLayer[segId] > layer) {
+				settleLayer[segId] = layer;
+			}
+		}
+	}
 
-  // Build segment lifecycles and legs
-  const lifecycles: SegmentLifecycle[] = [];
-  const legsByLayer: SegmentLeg[][] = [[]]; // layer 0 has no legs
-  for (let layer = 1; layer <= maxGen; layer++) {
-    legsByLayer.push([]);
-  }
+	// Build segment lifecycles and legs
+	const lifecycles: SegmentLifecycle[] = [];
+	const legsByLayer: SegmentLeg[][] = [[]]; // layer 0 has no legs
+	for (let layer = 1; layer <= maxGen; layer++) {
+		legsByLayer.push([]);
+	}
 
-  const settleIdsByLayer: number[][] = [[]];
-  for (let layer = 1; layer <= maxGen; layer++) {
-    settleIdsByLayer.push([]);
-  }
+	const settleIdsByLayer: number[][] = [[]];
+	for (let layer = 1; layer <= maxGen; layer++) {
+		settleIdsByLayer.push([]);
+	}
 
-  for (let segId = 0; segId < count; segId++) {
-    const sLayer = settleLayer[segId];
-    const legs: SegmentLeg[] = [];
+	for (let segId = 0; segId < count; segId++) {
+		const sLayer = settleLayer[segId];
+		const legs: SegmentLeg[] = [];
 
-    // Find this segment's slot at each layer (including post-settle pass-through)
-    for (let layer = 1; layer <= maxGen; layer++) {
-      const prevMapping = mappingByLayer[layer - 1];
-      const currMapping = mappingByLayer[layer];
+		// Find this segment's slot at each layer (including post-settle pass-through)
+		for (let layer = 1; layer <= maxGen; layer++) {
+			const prevMapping = mappingByLayer[layer - 1];
+			const currMapping = mappingByLayer[layer];
 
-      // Find which slot this segment is in at prev layer and current layer
-      const prevSlot = prevMapping.indexOf(segId);
-      const currSlot = currMapping.indexOf(segId);
+			// Find which slot this segment is in at prev layer and current layer
+			const prevSlot = prevMapping.indexOf(segId);
+			const currSlot = currMapping.indexOf(segId);
 
-      const isSettle = layer === sLayer;
-      const mode: "pass" | "settle" = isSettle ? "settle" : "pass";
+			const isSettle = layer === sLayer;
+			const mode: "pass" | "settle" = isSettle ? "settle" : "pass";
 
-      const [fromX, fromY] = getSlotWorldPos(segments, prevSlot);
-      const fromZ = (layer - 1) * config.layerSpacing;
-      const [toX, toY] = getSlotWorldPos(segments, currSlot);
-      const toZ = layer * config.layerSpacing;
+			const [fromX, fromY] = getSlotWorldPos(segments, prevSlot);
+			const fromZ = (layer - 1) * config.layerSpacing;
+			const [toX, toY] = getSlotWorldPos(segments, currSlot);
+			const toZ = layer * config.layerSpacing;
 
-      // Size: from slot's size, to slot's size (with object-fit contain for settle)
-      const fromSlotSize = getSlotWorldSize(segments, prevSlot);
-      let toSlotSize = getSlotWorldSize(segments, currSlot);
+			// Size: from slot's size, to slot's size (with object-fit contain for settle)
+			const fromSlotSize = getSlotWorldSize(segments, prevSlot);
+			let toSlotSize = getSlotWorldSize(segments, currSlot);
 
-      if (mode === "settle" && prevSlot !== currSlot) {
-        // Object-fit contain: segment's original size fitting into destination slot
-        const segOrigSize = getSlotWorldSize(segments, segId);
-        toSlotSize = computeContainedSize(
-          segOrigSize[0], segOrigSize[1],
-          toSlotSize[0], toSlotSize[1],
-        );
-      }
+			if (mode === "settle" && prevSlot !== currSlot) {
+				// Object-fit contain: segment's original size fitting into destination slot
+				const segOrigSize = getSlotWorldSize(segments, segId);
+				toSlotSize = computeContainedSize(
+					segOrigSize[0],
+					segOrigSize[1],
+					toSlotSize[0],
+					toSlotSize[1],
+				);
+			}
 
-      const leg: SegmentLeg = {
-        segId,
-        toLayer: layer,
-        mode,
-        from: [fromX, fromY, fromZ],
-        to: [toX, toY, toZ],
-        fromSize: fromSlotSize,
-        toSize: toSlotSize,
-      };
+			const leg: SegmentLeg = {
+				segId,
+				toLayer: layer,
+				mode,
+				from: [fromX, fromY, fromZ],
+				to: [toX, toY, toZ],
+				fromSize: fromSlotSize,
+				toSize: toSlotSize,
+			};
 
-      legs.push(leg);
-      legsByLayer[layer].push(leg);
-    }
+			legs.push(leg);
+			legsByLayer[layer].push(leg);
+		}
 
-    if (sLayer > 0) {
-      settleIdsByLayer[sLayer].push(segId);
-    }
+		if (sLayer > 0) {
+			settleIdsByLayer[sLayer].push(segId);
+		}
 
-    const finalSlot = mappingByLayer[sLayer].indexOf(segId);
-    lifecycles.push({ segId, settleLayer: sLayer, finalSlot, legs });
-  }
+		const finalSlot = mappingByLayer[sLayer].indexOf(segId);
+		lifecycles.push({ segId, settleLayer: sLayer, finalSlot, legs });
+	}
 
-  // Build vacated slots per layer: for each swap, both slots are "vacated"
-  // by the segment that was previously there (it moves to the other slot)
-  const vacatedByLayer: VacatedSlot[][] = [[]]; // layer 0 has no vacated slots
-  for (let layer = 1; layer <= maxGen; layer++) {
-    const vacated: VacatedSlot[] = [];
-    const sourceZ = (layer - 1) * config.layerSpacing;
+	// Build vacated slots per layer: for each swap, both slots are "vacated"
+	// by the segment that was previously there (it moves to the other slot)
+	const vacatedByLayer: VacatedSlot[][] = [[]]; // layer 0 has no vacated slots
+	for (let layer = 1; layer <= maxGen; layer++) {
+		const vacated: VacatedSlot[] = [];
+		const destZ = layer * config.layerSpacing;
 
-    const prevMapping = mappingByLayer[layer - 1];
-    for (const [slotA, slotB] of swapsByLayer[layer]) {
-      // Slot A is vacated by the segment that was there (prevMapping[slotA])
-      const [axPos, ayPos] = getSlotWorldPos(segments, slotA);
-      const [aw, ah] = getSlotWorldSize(segments, slotA);
-      vacated.push({
-        slotIndex: slotA,
-        segId: prevMapping[slotA],
-        position: [axPos, ayPos, sourceZ],
-        size: [aw, ah],
-      });
+		const prevMapping = mappingByLayer[layer - 1];
+		for (const [slotA, slotB] of swapsByLayer[layer]) {
+			// Slot A is vacated by the segment that was there (prevMapping[slotA])
+			const [axPos, ayPos] = getSlotWorldPos(segments, slotA);
+			const [aw, ah] = getSlotWorldSize(segments, slotA);
+			vacated.push({
+				slotIndex: slotA,
+				segId: prevMapping[slotA],
+				position: [axPos, ayPos, destZ],
+				size: [aw, ah],
+			});
 
-      // Slot B is vacated by the segment that was there (prevMapping[slotB])
-      const [bxPos, byPos] = getSlotWorldPos(segments, slotB);
-      const [bw, bh] = getSlotWorldSize(segments, slotB);
-      vacated.push({
-        slotIndex: slotB,
-        segId: prevMapping[slotB],
-        position: [bxPos, byPos, sourceZ],
-        size: [bw, bh],
-      });
-    }
+			// Slot B is vacated by the segment that was there (prevMapping[slotB])
+			const [bxPos, byPos] = getSlotWorldPos(segments, slotB);
+			const [bw, bh] = getSlotWorldSize(segments, slotB);
+			vacated.push({
+				slotIndex: slotB,
+				segId: prevMapping[slotB],
+				position: [bxPos, byPos, destZ],
+				size: [bw, bh],
+			});
+		}
 
-    vacatedByLayer.push(vacated);
-  }
+		vacatedByLayer.push(vacated);
+	}
 
-  return {
-    lifecycles,
-    legsByLayer,
-    settleIdsByLayer,
-    swapsByLayer,
-    mappingByLayer,
-    vacatedByLayer,
-  };
+	return {
+		lifecycles,
+		legsByLayer,
+		settleIdsByLayer,
+		swapsByLayer,
+		mappingByLayer,
+		vacatedByLayer,
+	};
 }

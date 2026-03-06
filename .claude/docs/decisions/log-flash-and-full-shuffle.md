@@ -31,3 +31,14 @@
   - `commitLayer` の settled 重複インスタンスの可能性
 - テストカバレッジ: N/A（フロントエンドアニメーション、ユニットテストなし）
 - Simplify対象: 0件
+
+### [deploy] POST — 2026-02-27
+
+- **担当者**: Claude Lead
+- **概要**: main ブランチに直接 push
+- **成果物**: コミット `da2da38` on origin/main
+
+### デプロイ詳細
+- ブランチ: `main` → origin
+- コミット: `da2da38`
+- Linear: ユーザー指示によりスキップ

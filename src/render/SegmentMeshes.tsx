@@ -397,13 +397,6 @@ export function SegmentMeshes({
     const currentLayer = buildSystem.getCurrentLayer();
     activeMeshRef.current.renderOrder = layerRenderOrder(currentLayer, "active");
 
-    const activeInstances = sortBackToFront(
-      buildSystem.getActiveInstances(),
-      camera,
-      viewDirRef.current,
-    );
-    writeInstances(activeGeo, activeInstances, segments);
-
     // Settled instances + black fills grouped by layer
     const settledByLayer = buildSystem.getSettledByLayer();
     const allBlackFills = buildSystem.getBlackFillInstances();
@@ -419,11 +412,21 @@ export function SegmentMeshes({
       arr.push(bf);
     }
 
+    // Active instances — include current layer's black fills during flash/swipe
+    const activeInstances = sortBackToFront(
+      buildSystem.getActiveInstances(),
+      camera,
+      viewDirRef.current,
+    );
+    const activeBlackFills = blackFillsByLayer.get(currentLayer);
+    writeInstances(activeGeo, activeInstances, segments, activeBlackFills);
+
     for (let i = 0; i < layerCount; i++) {
       const layerIdx = i + 1; // layers 1..maxGenerations
       const layerInstances = settledByLayer.get(layerIdx) ?? [];
       const sorted = sortBackToFront(layerInstances, camera, viewDirRef.current);
-      const layerBlackFills = blackFillsByLayer.get(layerIdx);
+      // Don't double-render black fills already shown in active mesh
+      const layerBlackFills = layerIdx === currentLayer ? undefined : blackFillsByLayer.get(layerIdx);
       writeInstances(settledPool.geos[i], sorted, segments, layerBlackFills);
       settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");
     }
