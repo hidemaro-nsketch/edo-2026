@@ -48,8 +48,9 @@ function useDebugGui(): DebugGuiResult {
 	});
 
 	const animation = useControls("Animation", {
-		swipeDuration: { value: 1.5, min: 0.1, max: 6, step: 0.1 },
-		holdDuration: { value: 1.0, min: 0, max: 10, step: 0.1 },
+		swipeDuration: { value: 2.2, min: 0.1, max: 8, step: 0.1 },
+		swipeDurationJitter: { value: 0.25, min: 0, max: 0.8, step: 0.01 },
+		holdDuration: { value: 1.4, min: 0, max: 10, step: 0.1 },
 	});
 
 	const layers = useControls("Layers", {
@@ -84,26 +85,9 @@ function KimonoBackground({
 }) {
 	if (!texture) return null;
 
-	const halfHeight = KIMONO_SIZE / 2;
-	const yOffset = halfHeight / 2;
-
 	return (
-		<mesh
-			position={[0, yOffset, -0.1]}
-			renderOrder={-100}
-			onUpdate={(mesh) => {
-				const uv = mesh.geometry.getAttribute("uv");
-				if (uv && !(uv as any).__halfAdjusted) {
-					for (let i = 0; i < uv.count; i++) {
-						const v = uv.getY(i);
-						uv.setY(i, 0.5 + v * 0.5);
-					}
-					uv.needsUpdate = true;
-					(uv as any).__halfAdjusted = true;
-				}
-			}}
-		>
-			<planeGeometry args={[KIMONO_SIZE, halfHeight]} />
+		<mesh position={[0, 0, -0.1]} renderOrder={-100}>
+			<planeGeometry args={[KIMONO_SIZE, KIMONO_SIZE]} />
 			<meshBasicMaterial
 				map={texture}
 				transparent
@@ -234,7 +218,7 @@ function Scene() {
 			try {
 				const loader = new TextureLoader();
 				const bgTex = await loader.loadAsync(
-					`${SAKURA_BASE_PATH}/kimono_bg_inv.png`,
+					`${SAKURA_BASE_PATH}/kimono_bg_inv.jpg`,
 				);
 				if (disposed) return;
 				bgTex.colorSpace = SRGBColorSpace;
@@ -265,6 +249,8 @@ function Scene() {
 		() => ({
 			maxGenerations: gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations,
 			swipeDuration: gui.swipeDuration ?? DEFAULT_CONFIG.swipeDuration,
+			swipeDurationJitter:
+				gui.swipeDurationJitter ?? DEFAULT_CONFIG.swipeDurationJitter,
 			holdDuration: gui.holdDuration ?? DEFAULT_CONFIG.holdDuration,
 			layerSpacing: gui.layerSpacing ?? DEFAULT_CONFIG.layerSpacing,
 			collapseDuration: gui.collapseDuration ?? DEFAULT_CONFIG.collapseDuration,
@@ -301,7 +287,7 @@ function App() {
 				orthographic
 				camera={{
 					position: [0, Y_CENTER_OFFSET, 50],
-					zoom: 350,
+					zoom: 250,
 					near: 0.1,
 					far: 200,
 				}}

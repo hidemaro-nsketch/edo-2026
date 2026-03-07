@@ -1,3 +1,21 @@
+/**
+ * SegmentMeshes.tsx — GPU Instanced Renderer
+ *
+ * Renders all segment quads using a single instanced draw call per mesh.
+ * Three mesh layers are managed:
+ *   1. Base mesh (layer 0): static original segment positions
+ *   2. Active mesh: currently-animating layer (swipe transitions + black fills)
+ *   3. Settled pool: one mesh per past layer (committed segments + their black fills)
+ *
+ * Each instance carries per-quad attributes (position, UV rect, opacity, wipe state)
+ * written to GPU buffers every frame by writeInstances().
+ *
+ * The fragment shader handles three rendering modes:
+ *   - Normal: atlas-textured segment with premultiplied alpha
+ *   - Black fill: black silhouette using atlas alpha as mask
+ *   - Swipe wipe: horizontal clip transition between old and new segment
+ */
+
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import {
@@ -130,6 +148,8 @@ function createMaterial(atlas: Texture): ShaderMaterial {
 }
 
 // ─── Geometry helpers ────────────────────────────────────────────────────────
+// DynamicGeometry wraps an InstancedBufferGeometry with typed accessors
+// for each per-instance attribute. Instances are written each frame.
 
 type DynamicGeometry = {
   geo: InstancedBufferGeometry;
@@ -176,6 +196,11 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
   return { geo, posXY, posZ, size, uvRect, opacity, isBlackFill, wipeRole, isBboxOutline, swipeProgress, maxInstances };
 }
 
+/**
+ * Write segment instances + optional black fills into a DynamicGeometry's GPU buffers.
+ * Segments come first, then black fills are appended after them.
+ * Must be called every frame since instance data changes with animation.
+ */
 function writeInstances(
   dg: DynamicGeometry,
   instances: SegmentInstance[],
@@ -248,6 +273,7 @@ function writeInstances(
   dg.swipeProgress.needsUpdate = true;
 }
 
+/** Sort instances back-to-front relative to camera for correct alpha blending */
 function sortBackToFront(
   instances: SegmentInstance[],
   camera: Camera,
@@ -271,6 +297,8 @@ function sortBackToFront(
 }
 
 // ─── Base mesh (static layer 0) ─────────────────────────────────────────────
+// The base layer shows all segments at their original positions in the source image.
+// This never changes during animation — it's the "ground truth" reference.
 
 function buildBaseGeometry(segments: SegmentInfo[]): DynamicGeometry {
   const count = segments.length;
@@ -302,6 +330,8 @@ function buildBaseGeometry(segments: SegmentInfo[]): DynamicGeometry {
 }
 
 // ─── Render order constants ──────────────────────────────────────────────────
+// Each layer gets a render order band (stride=10) to ensure correct draw order.
+// Within a layer, active instances draw before settled to avoid z-fighting.
 
 const RENDER_ORDER_LAYER_STRIDE = 10;
 const RENDER_ORDER_ACTIVE_OFFSET = 1;
@@ -313,6 +343,8 @@ function layerRenderOrder(layer: number, type: "active" | "settled"): number {
 }
 
 // ─── Per-layer mesh pool ─────────────────────────────────────────────────────
+// Pre-allocates one mesh per layer so settled segments + black fills can be
+// rendered independently per layer (needed for correct render ordering).
 
 type LayerMeshPool = {
   geos: DynamicGeometry[];
@@ -390,43 +422,33 @@ export function SegmentMeshes({
     };
   }, [baseGeo, activeGeo, material, settledPool]);
 
+  // ── Per-frame update: advance animation and write GPU buffers ──
   useFrame((_, delta) => {
     buildSystem.update(delta);
 
-    // Active instances (flying segments for current layer)
     const currentLayer = buildSystem.getCurrentLayer();
     activeMeshRef.current.renderOrder = layerRenderOrder(currentLayer, "active");
 
-    // Settled instances + black fills grouped by layer
+    // Gather all render data from BuildSystem
     const settledByLayer = buildSystem.getSettledByLayer();
-    const allBlackFills = buildSystem.getBlackFillInstances();
+    const activeBlackFills = buildSystem.getBlackFillInstances();       // current layer only (swipe phase)
+    const committedBlackFills = buildSystem.getCommittedBlackFills();   // past layers' preserved fills
 
-    // Group black fills by their source layer
-    const blackFillsByLayer = new Map<number, BlackFillInstance[]>();
-    for (const bf of allBlackFills) {
-      let arr = blackFillsByLayer.get(bf.sourceLayer);
-      if (!arr) {
-        arr = [];
-        blackFillsByLayer.set(bf.sourceLayer, arr);
-      }
-      arr.push(bf);
-    }
-
-    // Active instances — include current layer's black fills during flash/swipe
+    // Write active mesh: currently-animating segments + current layer's black fills
     const activeInstances = sortBackToFront(
       buildSystem.getActiveInstances(),
       camera,
       viewDirRef.current,
     );
-    const activeBlackFills = blackFillsByLayer.get(currentLayer);
-    writeInstances(activeGeo, activeInstances, segments, activeBlackFills);
+    writeInstances(activeGeo, activeInstances, segments, activeBlackFills.length > 0 ? activeBlackFills : undefined);
 
+    // Write settled meshes: one per past layer, each with its own committed black fills.
+    // The active layer's black fills are already in the active mesh, so skip them here.
     for (let i = 0; i < layerCount; i++) {
-      const layerIdx = i + 1; // layers 1..maxGenerations
+      const layerIdx = i + 1;
       const layerInstances = settledByLayer.get(layerIdx) ?? [];
       const sorted = sortBackToFront(layerInstances, camera, viewDirRef.current);
-      // Don't double-render black fills already shown in active mesh
-      const layerBlackFills = layerIdx === currentLayer ? undefined : blackFillsByLayer.get(layerIdx);
+      const layerBlackFills = layerIdx === currentLayer ? undefined : committedBlackFills.get(layerIdx);
       writeInstances(settledPool.geos[i], sorted, segments, layerBlackFills);
       settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");
     }

@@ -14,6 +14,7 @@ export type CategoryInfo = {
 export type SegmentInfo = {
 	id: number;
 	sourceImageId: string;
+	categoryName: string;
 	categoryId: number;
 	categoryMask: number;
 	atlasPage: number;

@@ -1,3 +1,18 @@
+/**
+ * compiled-plan.ts — Shuffle Plan Compiler
+ *
+ * Pre-computes the entire shuffle sequence before any animation starts.
+ * The output (CompiledPlan) contains everything the BuildSystem needs
+ * to drive the layer-by-layer animation without any runtime randomness.
+ *
+ * Pipeline:
+ *   1. Generate swap pairs per layer (category-aware, staggered start)
+ *   2. Build cumulative slot→segment mappings per layer
+ *   3. Determine each segment's "settle layer" (first swap participation)
+ *   4. Build flight legs (from/to positions) for every segment at every layer
+ *   5. Build vacated slot records for black fill rendering
+ */
+
 import {
 	computeContainedSize,
 	getSlotWorldPos,
@@ -14,13 +29,9 @@ import type {
 } from "./types";
 
 /**
- * Compute bounding box area for a slot (uses the segment geometry at that slot index).
+ * Check if two slots' bounding boxes overlap in the source image.
+ * Overlapping slots cannot be swapped (their visuals would collide).
  */
-function slotArea(segments: SegmentInfo[], slotIndex: number): number {
-	const seg = segments[slotIndex];
-	return seg.bboxInSource[2] * seg.bboxInSource[3];
-}
-
 function slotsOverlap(
 	segments: SegmentInfo[],
 	slotA: number,
@@ -43,79 +54,81 @@ function slotsOverlap(
 }
 
 /**
+ * Group slot indices by categoryId (e.g. sakura=0, leaf=1, flower=2).
+ * Used to ensure swaps only happen within the same category.
+ */
+function groupByCategory(segments: SegmentInfo[]): Map<number, number[]> {
+	const groups = new Map<number, number[]>();
+	for (let i = 0; i < segments.length; i++) {
+		const catId = segments[i].categoryId;
+		let arr = groups.get(catId);
+		if (!arr) {
+			arr = [];
+			groups.set(catId, arr);
+		}
+		arr.push(i);
+	}
+	return groups;
+}
+
+/**
+ * Minimum layer at which each category begins swapping.
+ * Sakura starts immediately; leaf and flower are introduced later
+ * so the animation builds up complexity gradually.
+ */
+const CATEGORY_START_LAYER: Record<string, number> = {
+	sakura: 1,
+	leaf: 4,
+	flower: 7,
+};
+
+/**
  * Generate swap pairs for a given generation.
- * Swap count is fixed per layer for stable, predictable transitions.
- * Pairs slots with similar bounding box areas. The neighbourhood radius
- * widens as generations progress: early layers pair very similar sizes,
- * later layers allow larger size differences for more variety.
- * No slot appears in more than one pair per generation.
+ * Swaps only occur between segments of the same category.
+ * Each category starts swapping at its configured layer threshold.
+ * One swap per category per layer. No slot appears in more than one pair.
  */
 function generateSwapPairs(
 	gen: number,
-	maxGenerations: number,
+	_maxGenerations: number,
 	segments: SegmentInfo[],
 ): SwapPair[] {
-	const SWAPS_PER_LAYER = 1;
-	const segmentCount = segments.length;
-	const maxSwaps = Math.floor(segmentCount / 2);
-	const t = maxGenerations <= 1 ? 1 : (gen - 1) / (maxGenerations - 1);
-	const swapCount = Math.min(SWAPS_PER_LAYER, maxSwaps);
+	const SWAPS_PER_CATEGORY = 1;
+	const categoryGroups = groupByCategory(segments);
 
-	// Sort slot indices by bbox area
-	const sorted = Array.from({ length: segmentCount }, (_, i) => i);
-	sorted.sort((a, b) => slotArea(segments, a) - slotArea(segments, b));
-
-	// Active size window slides from small -> large as layers progress.
-	// Early layers mostly affect smaller segments; later layers shift to larger ones.
-	const minWindow = Math.min(
-		segmentCount,
-		Math.max(2, Math.round(segmentCount * 0.3)),
-	);
-	const windowSize = Math.max(2, minWindow);
-	const start = Math.round((segmentCount - windowSize) * t);
-	const active = sorted.slice(start, start + windowSize);
-
-	// Neighbourhood radius: 1 (strict adjacent) at gen 1, up to half the active list at max gen
-	const maxRadius = Math.max(1, Math.floor(active.length / 2));
-	const radius = Math.max(1, Math.round(1 + (maxRadius - 1) * t));
-
-	// Greedy random pairing within neighbourhood
 	const used = new Set<number>();
 	const pairs: SwapPair[] = [];
 
-	// Randomize traversal order so pairs vary across layers
-	const order = Array.from({ length: active.length }, (_, i) => i);
-	for (let i = order.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[order[i], order[j]] = [order[j], order[i]];
-	}
+	for (const [, slots] of categoryGroups) {
+		const catName = segments[slots[0]].categoryName;
+		const startLayer = CATEGORY_START_LAYER[catName] ?? 1;
+		if (gen < startLayer) continue;
+		if (slots.length < 2) continue;
 
-	for (const sortedIdx of order) {
-		if (pairs.length >= swapCount) break;
-		const slotA = active[sortedIdx];
-		if (used.has(slotA)) continue;
-
-		// Pick a random partner within the neighbourhood radius in sorted order
-		const lo = Math.max(0, sortedIdx - radius);
-		const hi = Math.min(active.length - 1, sortedIdx + radius);
-
-		// Collect eligible neighbours
-		const candidates: number[] = [];
-		for (let k = lo; k <= hi; k++) {
-			if (k === sortedIdx) continue;
-			const slotB = active[k];
-			if (used.has(slotB)) continue;
-			if (slotsOverlap(segments, slotA, slotB)) continue;
-			candidates.push(k);
+		// Shuffle slots for randomness
+		const shuffled = [...slots];
+		for (let i = shuffled.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
 		}
-		if (candidates.length === 0) continue;
 
-		const pick = candidates[Math.floor(Math.random() * candidates.length)];
-		const slotB = active[pick];
+		let count = 0;
+		for (let i = 0; i < shuffled.length && count < SWAPS_PER_CATEGORY; i++) {
+			const slotA = shuffled[i];
+			if (used.has(slotA)) continue;
 
-		used.add(slotA);
-		used.add(slotB);
-		pairs.push([slotA, slotB]);
+			for (let k = i + 1; k < shuffled.length; k++) {
+				const slotB = shuffled[k];
+				if (used.has(slotB)) continue;
+				if (slotsOverlap(segments, slotA, slotB)) continue;
+
+				used.add(slotA);
+				used.add(slotB);
+				pairs.push([slotA, slotB]);
+				count++;
+				break;
+			}
+		}
 	}
 
 	return pairs;
@@ -132,15 +145,17 @@ export function compilePlan(
 	const count = segments.length;
 	const maxGen = config.maxGenerations;
 
-	// Generate all swap pairs for all layers
-	const swapsByLayer: SwapPair[][] = [[]]; // layer 0 has no swaps
+	// ── Step 1: Generate swap pairs for each layer ──
+	// Each layer gets category-aware random swaps (sakura↔sakura, leaf↔leaf, etc.)
+	const swapsByLayer: SwapPair[][] = [[]]; // layer 0 = base, no swaps
 	for (let layer = 1; layer <= maxGen; layer++) {
 		swapsByLayer.push(generateSwapPairs(layer, maxGen, segments));
 	}
 
-	// Build slot-to-segment mappings for each layer
+	// ── Step 2: Build cumulative slot→segment mappings ──
+	// mappingByLayer[L][slot] = segId at that slot after all swaps up to layer L
 	const mappingByLayer: number[][] = [];
-	mappingByLayer.push(Array.from({ length: count }, (_, i) => i)); // layer 0: identity
+	mappingByLayer.push(Array.from({ length: count }, (_, i) => i)); // layer 0: identity (seg i → slot i)
 
 	for (let layer = 1; layer <= maxGen; layer++) {
 		const prev = [...mappingByLayer[layer - 1]];
@@ -152,9 +167,10 @@ export function compilePlan(
 		mappingByLayer.push(prev);
 	}
 
-	// For each segment, determine which layer it first participates in a swap
-	// settleLayer[segId] = first layer where this segment is in a swap pair
-	const settleLayer = new Array<number>(count).fill(maxGen); // default: last layer
+	// ── Step 3: Determine settle layer for each segment ──
+	// settleLayer[segId] = the first layer where this segment is involved in a swap.
+	// Segments that are never swapped default to the last layer.
+	const settleLayer = new Array<number>(count).fill(maxGen);
 
 	for (let layer = 1; layer <= maxGen; layer++) {
 		const swappedSlots = new Set<number>();
@@ -173,7 +189,9 @@ export function compilePlan(
 		}
 	}
 
-	// Build segment lifecycles and legs
+	// ── Step 4: Build flight legs for every segment at every layer ──
+	// Each leg describes a segment's from/to position between consecutive layers.
+	// mode="settle" means the segment is being swapped; mode="pass" means it stays put.
 	const lifecycles: SegmentLifecycle[] = [];
 	const legsByLayer: SegmentLeg[][] = [[]]; // layer 0 has no legs
 	for (let layer = 1; layer <= maxGen; layer++) {
@@ -243,8 +261,10 @@ export function compilePlan(
 		lifecycles.push({ segId, settleLayer: sLayer, finalSlot, legs });
 	}
 
-	// Build vacated slots per layer: for each swap, both slots are "vacated"
-	// by the segment that was previously there (it moves to the other slot)
+	// ── Step 5: Build vacated slots for black fill rendering ──
+	// When a swap occurs, both slots become "vacated" — the previous occupant
+	// has moved away. These are rendered as black silhouettes (black fills)
+	// to show where the segment used to be.
 	const vacatedByLayer: VacatedSlot[][] = [[]]; // layer 0 has no vacated slots
 	for (let layer = 1; layer <= maxGen; layer++) {
 		const vacated: VacatedSlot[] = [];

@@ -1,9 +1,23 @@
+/**
+ * types.ts — Layered Shuffle Type Definitions
+ *
+ * Data structures for the layered shuffle system:
+ *   - ShuffleConfig: animation timing & layout parameters
+ *   - CompiledPlan: pre-computed shuffle sequence (swap pairs, flight legs, mappings)
+ *   - BuildState/BuildPhase: runtime state machine for the animation loop
+ *
+ * Data flow:
+ *   SegmentInfo[] + ShuffleConfig → compilePlan() → CompiledPlan → BuildSystem → SegmentMeshes
+ */
+
 /** Configuration for the layered shuffle system */
 export type ShuffleConfig = {
 	/** Maximum number of shuffle generations */
 	maxGenerations: number;
 	/** Duration of swipe animation per layer in seconds */
 	swipeDuration: number;
+	/** Random variation ratio for swipe duration per layer (0..1) */
+	swipeDurationJitter: number;
 	/** Hold duration after swipe before committing layer in seconds */
 	holdDuration: number;
 	/** Z distance between adjacent layers */
@@ -100,8 +114,9 @@ export type BuildState = {
 /** Default configuration values */
 export const DEFAULT_CONFIG: ShuffleConfig = {
 	maxGenerations: 10,
-	swipeDuration: 1.5,
-	holdDuration: 1.0,
+	swipeDuration: 2.2,
+	swipeDurationJitter: 0.25,
+	holdDuration: 1.4,
 	layerSpacing: 1.0,
 	collapseDuration: 0.2,
 	collapseStagger: 0.08,
