@@ -117,7 +117,9 @@ void main() {
     vec2 flippedUv = vec2(vUv.x, 1.0 - vUv.y);
     vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
     float a = texture2D(uAtlas, atlasUv).a;
-    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+    // Sharpen edge alpha so the fill is solidly black (no translucent fringe)
+    float solidA = step(0.01, a);
+    gl_FragColor = vec4(0.0, 0.0, 0.0, solidA);
     return;
   }
 
