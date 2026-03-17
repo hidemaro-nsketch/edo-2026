@@ -312,9 +312,10 @@ function sortBackToFront(
 // The base layer shows all segments at their original positions in the source image.
 // This never changes during animation — it's the "ground truth" reference.
 
-function buildBaseGeometry(segments: SegmentInfo[]): DynamicGeometry {
+function buildBaseGeometry(segments: SegmentInfo[]): { dg: DynamicGeometry; baseInstances: SegmentInstance[] } {
   const count = segments.length;
-  const dg = createDynamicGeometry(count);
+  // Allocate extra space for black fills that may be placed on layer 0
+  const dg = createDynamicGeometry(count * 2);
 
   const instances: SegmentInstance[] = [];
   for (let i = 0; i < count; i++) {
@@ -338,7 +339,7 @@ function buildBaseGeometry(segments: SegmentInfo[]): DynamicGeometry {
   }
 
   writeInstances(dg, instances, segments);
-  return dg;
+  return { dg, baseInstances: instances };
 }
 
 // ─── Render order constants ──────────────────────────────────────────────────
@@ -408,12 +409,12 @@ export function SegmentMeshes({
   // Each layer pool needs space for segments + potential black fills
   const maxPerLayer = segments.length * 2;
 
-  const { baseGeo, activeGeo, material, settledPool } = useMemo(() => {
-    const bg = buildBaseGeometry(segments);
+  const { baseGeo, baseInstances, activeGeo, material, settledPool } = useMemo(() => {
+    const { dg: bg, baseInstances: bi } = buildBaseGeometry(segments);
     const ag = createDynamicGeometry(segments.length);
     const mat = createMaterial(atlasTexture);
     const pool = createLayerMeshPool(maxPerLayer, mat, layerCount);
-    return { baseGeo: bg, activeGeo: ag, material: mat, settledPool: pool };
+    return { baseGeo: bg, baseInstances: bi, activeGeo: ag, material: mat, settledPool: pool };
   }, [segments, atlasTexture, layerCount, maxPerLayer]);
 
   const baseMeshRef = useRef<Mesh>(new Mesh(baseGeo.geo, material));
@@ -469,24 +470,46 @@ export function SegmentMeshes({
 
     // Gather all render data from BuildSystem
     const settledByLayer = buildSystem.getSettledByLayer();
-    const activeBlackFills = buildSystem.getBlackFillInstances();       // current layer only (swipe phase)
+    const activeBlackFills = buildSystem.getBlackFillInstances();       // current layer's swap → placed on prev layer
     const committedBlackFills = buildSystem.getCommittedBlackFills();   // past layers' preserved fills
 
-    // Write active mesh: currently-animating segments + current layer's black fills
+    // Write active mesh: currently-animating segments (no black fills here — they go on prev layer)
     const activeInstances = sortBackToFront(
       buildSystem.getActiveInstances(),
       camera,
       viewDirRef.current,
     );
-    writeInstances(activeGeo, activeInstances, segments, activeBlackFills.length > 0 ? activeBlackFills : undefined);
+    writeInstances(activeGeo, activeInstances, segments);
+
+    // Determine which layer receives the active (not yet committed) black fills
+    const activeBfLayer = currentLayer - 1;
+
+    // Re-write base mesh (layer 0) when it has black fills from layer 1's swap
+    {
+      let layer0BlackFills = committedBlackFills.get(0);
+      if (activeBfLayer === 0 && activeBlackFills.length > 0) {
+        layer0BlackFills = layer0BlackFills
+          ? [...layer0BlackFills, ...activeBlackFills]
+          : activeBlackFills;
+      }
+      writeInstances(baseGeo, baseInstances, segments, layer0BlackFills);
+    }
 
     // Write settled meshes: one per past layer, each with its own committed black fills.
-    // The active layer's black fills are already in the active mesh, so skip them here.
+    // Active black fills (from current swipe) are placed on the previous layer's mesh.
     for (let i = 0; i < layerCount; i++) {
       const layerIdx = i + 1;
       const layerInstances = settledByLayer.get(layerIdx) ?? [];
       const sorted = sortBackToFront(layerInstances, camera, viewDirRef.current);
-      const layerBlackFills = layerIdx === currentLayer ? undefined : committedBlackFills.get(layerIdx);
+
+      // Merge committed black fills with active black fills for the previous layer
+      let layerBlackFills = committedBlackFills.get(layerIdx);
+      if (layerIdx === activeBfLayer && activeBlackFills.length > 0) {
+        layerBlackFills = layerBlackFills
+          ? [...layerBlackFills, ...activeBlackFills]
+          : activeBlackFills;
+      }
+
       writeInstances(settledPool.geos[i], sorted, segments, layerBlackFills);
       settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");
     }

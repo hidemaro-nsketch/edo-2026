@@ -261,7 +261,8 @@ export function compilePlan(
 	const vacatedByLayer: VacatedSlot[][] = [[]]; // layer 0 has no vacated slots
 	for (let layer = 1; layer <= maxGen; layer++) {
 		const vacated: VacatedSlot[] = [];
-		const destZ = layer * config.layerSpacing;
+		// Black fills appear on the previous layer (where the segment was before the swap)
+		const destZ = (layer - 1) * config.layerSpacing;
 
 		const prevMapping = mappingByLayer[layer - 1];
 		for (const [slotA, slotB] of swapsByLayer[layer]) {

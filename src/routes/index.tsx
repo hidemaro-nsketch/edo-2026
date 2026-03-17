@@ -106,6 +106,7 @@ function useDebugGui(): DebugGuiResult {
 
 	// セグメントが次の位置へ移動する際のアニメーション設定
 	const animation = useControls("Animation", {
+		preSwipeDuration: { value: 0.8, min: 0, max: 5, step: 0.1 }, // swipe前に黒塗りを表示する秒数
 		swipeDuration: { value: 2.2, min: 0.1, max: 8, step: 0.1 }, // 移動にかかる秒数
 		swipeDurationJitter: { value: 0.25, min: 0, max: 0.8, step: 0.01 }, // ランダムなばらつき
 		holdDuration: { value: 1.4, min: 0, max: 10, step: 0.1 }, // 到着後に静止する秒数
@@ -308,7 +309,10 @@ function CameraAndLifecycle({
 		}
 
 		// 現在レイヤーを ref 経由で CameraRig に伝達（setState を避けてパフォーマンス維持）
-		currentLayerRef.current = buildSystem.state.currentLayer;
+		// カメラの斜め移行は preCollapse 以降のみ。swipe/hold 中は maxGenerations 未満に抑える
+		const { phase, currentLayer } = buildSystem.state;
+		const isPostComplete = phase === "preCollapse" || phase === "collapsing" || phase === "holding";
+		currentLayerRef.current = isPostComplete ? currentLayer : Math.min(currentLayer, config.maxGenerations - 1);
 	});
 
 	return (
@@ -402,6 +406,7 @@ function Scene() {
 	const config: ShuffleConfig = useMemo(
 		() => ({
 			maxGenerations: gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations,
+			preSwipeDuration: gui.preSwipeDuration ?? DEFAULT_CONFIG.preSwipeDuration,
 			swipeDuration: gui.swipeDuration ?? DEFAULT_CONFIG.swipeDuration,
 			swipeDurationJitter:
 				gui.swipeDurationJitter ?? DEFAULT_CONFIG.swipeDurationJitter,
@@ -415,6 +420,7 @@ function Scene() {
 		}),
 		[
 			gui.maxGenerations,
+			gui.preSwipeDuration,
 			gui.swipeDuration,
 			gui.swipeDurationJitter,
 			gui.holdDuration,

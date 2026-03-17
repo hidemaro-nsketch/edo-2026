@@ -78,7 +78,7 @@ export class BuildSystem {
 		this.plan = plan;
 		this.config = config;
 		this.segmentCount = plan.mappingByLayer[0].length;
-		this.state = { currentLayer: 1, phase: "swipe", phaseTime: 0 };
+		this.state = { currentLayer: 1, phase: "preSwipe", phaseTime: 0 };
 		this.currentSwipeDuration = this.pickSwipeDuration();
 		this.syncBlackFillsForCurrentLayer();
 	}
@@ -94,7 +94,7 @@ export class BuildSystem {
 		this.collapseTimer = 0;
 		this.collapseStaggerTimer = 0;
 		this.currentSwipeDuration = this.pickSwipeDuration();
-		this.state = { currentLayer: 1, phase: "swipe", phaseTime: 0 };
+		this.state = { currentLayer: 1, phase: "preSwipe", phaseTime: 0 };
 		this.syncBlackFillsForCurrentLayer();
 	}
 
@@ -107,6 +107,9 @@ export class BuildSystem {
 
 	update(deltaTime: number): void {
 		switch (this.state.phase) {
+			case "preSwipe":
+				this.updatePreSwipe(deltaTime);
+				return;
 			case "swipe":
 				this.updateSwipe(deltaTime);
 				return;
@@ -128,6 +131,14 @@ export class BuildSystem {
 			case "complete":
 			case "idle":
 				return;
+		}
+	}
+
+	private updatePreSwipe(dt: number): void {
+		this.state.phaseTime += dt;
+		if (this.state.phaseTime >= this.config.preSwipeDuration) {
+			this.state.phase = "swipe";
+			this.state.phaseTime = 0;
 		}
 	}
 
@@ -168,9 +179,15 @@ export class BuildSystem {
 		}
 		this.settledDirty = true;
 
-		// Persist black fills for this layer
+		// Persist black fills on the previous layer (where the segment was before the swap)
 		if (this.blackFills.length > 0) {
-			this.committedBlackFills.set(layer, [...this.blackFills]);
+			const prevLayer = layer - 1;
+			const existing = this.committedBlackFills.get(prevLayer);
+			if (existing) {
+				existing.push(...this.blackFills);
+			} else {
+				this.committedBlackFills.set(prevLayer, [...this.blackFills]);
+			}
 		}
 
 		if (layer >= this.config.maxGenerations) {
@@ -179,7 +196,7 @@ export class BuildSystem {
 		}
 
 		this.state.currentLayer = layer + 1;
-		this.state.phase = "swipe";
+		this.state.phase = "preSwipe";
 		this.state.phaseTime = 0;
 		this.currentSwipeDuration = this.pickSwipeDuration();
 		this.syncBlackFillsForCurrentLayer();
@@ -242,9 +259,11 @@ export class BuildSystem {
 		}
 	}
 
-	/** Create black fill instances from the plan's vacated slots for the current layer */
+	/** Create black fill instances from the plan's vacated slots for the current layer.
+	 *  Black fills are placed on the previous layer (where the segment was before the swap). */
 	private syncBlackFillsForCurrentLayer(): void {
 		const layer = this.state.currentLayer;
+		const prevLayer = layer - 1;
 		const vacated = this.plan.vacatedByLayer[layer] ?? [];
 		this.blackFills = vacated.map((v) => ({
 			segId: v.segId,
@@ -253,7 +272,7 @@ export class BuildSystem {
 			z: v.position[2],
 			w: v.size[0],
 			h: v.size[1],
-			sourceLayer: layer,
+			sourceLayer: prevLayer,
 		}));
 	}
 
@@ -292,6 +311,7 @@ export class BuildSystem {
 
 		if (phase === "collapsing") return this.getCollapseInstances();
 		if (
+			phase === "preSwipe" ||
 			phase === "preCollapse" ||
 			phase === "holding" ||
 			phase === "idle" ||
@@ -416,10 +436,13 @@ export class BuildSystem {
 		return this.settledByLayerCache;
 	}
 
-	/** Get black fills for the active layer (only during swipe phase) */
+	/** Get black fills for the active layer (visible from preSwipe through hold, until commit) */
 	getBlackFillInstances(): BlackFillInstance[] {
-		if (this.state.phase !== "swipe") return [];
-		return this.blackFills;
+		const { phase } = this.state;
+		if (phase === "preSwipe" || phase === "swipe" || phase === "hold") {
+			return this.blackFills;
+		}
+		return [];
 	}
 
 	/** Get black fills from all past committed layers (keyed by layer number) */
