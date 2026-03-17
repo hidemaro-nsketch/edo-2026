@@ -152,23 +152,21 @@ export class BuildSystem {
 	/** Finalize the current layer: move segments to settled, save black fills, advance to next */
 	private commitLayer(): void {
 		const layer = this.state.currentLayer;
-		// Add segments whose settle layer is at or before this layer to the settled list
+		// Only add segments whose slot content changed at this layer (i.e., swapped)
 		for (const leg of this.plan.legsByLayer[layer] ?? []) {
-			const lifecycle = this.plan.lifecycles[leg.segId];
-			if (lifecycle.settleLayer <= layer) {
-				this.settled.push({
-					segId: leg.segId,
-					x: leg.to[0],
-					y: leg.to[1],
-					z: leg.to[2],
-					w: leg.toSize[0],
-					h: leg.toSize[1],
-					wipeRole: 0,
-					isBboxOutline: 0,
-					swipeProgress: 0,
-					layer,
-				});
-			}
+			if (leg.mode !== "settle") continue;
+			this.settled.push({
+				segId: leg.segId,
+				x: leg.to[0],
+				y: leg.to[1],
+				z: leg.to[2],
+				w: leg.toSize[0],
+				h: leg.toSize[1],
+				wipeRole: 0,
+				isBboxOutline: 0,
+				swipeProgress: 0,
+				layer,
+			});
 		}
 		this.settledDirty = true;
 
@@ -311,21 +309,8 @@ export class BuildSystem {
 
 		const instances: SegmentInstance[] = [];
 		for (const leg of legs) {
-			// "pass" legs: segment stays in same position, just at the new Z depth
-			if (leg.mode === "pass") {
-				instances.push({
-					segId: leg.segId,
-					x: leg.to[0],
-					y: leg.to[1],
-					z: leg.to[2],
-					w: leg.toSize[0],
-					h: leg.toSize[1],
-					wipeRole: 0,
-					isBboxOutline: 0,
-					swipeProgress: 0,
-				});
-				continue;
-			}
+			// Skip "pass" legs — unchanged slots are not rendered on upper layers
+			if (leg.mode === "pass") continue;
 
 			// "settle" legs: segment is being swapped to a new slot
 			// During swipe, render both old and new segment with wipe transition

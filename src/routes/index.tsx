@@ -113,7 +113,7 @@ function useDebugGui(): DebugGuiResult {
 
 	// レイヤー構成の設定
 	const layers = useControls("Layers", {
-		maxGenerations: { value: 10, min: 1, max: 20, step: 1 }, // シャッフルの世代数（レイヤー数）
+		maxGenerations: { value: 2, min: 1, max: 20, step: 1 }, // シャッフルの世代数（レイヤー数）
 		layerSpacing: { value: 1.5, min: 0.1, max: 4, step: 0.1 }, // レイヤー間の Z 軸距離
 	});
 
@@ -420,7 +420,7 @@ function Scene() {
 
 	return (
 		<>
-			<KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} />
+			{/* <KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} /> */}
 			{atlasTexture && (
 				<ShuffleContent
 					segments={segments}

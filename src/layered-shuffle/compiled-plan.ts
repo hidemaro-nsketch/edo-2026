@@ -169,8 +169,8 @@ export function compilePlan(
 
 	// ── Step 3: Determine settle layer for each segment ──
 	// settleLayer[segId] = the first layer where this segment is involved in a swap.
-	// Segments that are never swapped default to the last layer.
-	const settleLayer = new Array<number>(count).fill(maxGen);
+	// Segments that are never swapped get maxGen+1 (meaning "never settled").
+	const settleLayer = new Array<number>(count).fill(maxGen + 1);
 
 	for (let layer = 1; layer <= maxGen; layer++) {
 		const swappedSlots = new Set<number>();
@@ -253,11 +253,13 @@ export function compilePlan(
 			legsByLayer[layer].push(leg);
 		}
 
-		if (sLayer > 0) {
+		if (sLayer > 0 && sLayer <= maxGen) {
 			settleIdsByLayer[sLayer].push(segId);
 		}
 
-		const finalSlot = mappingByLayer[sLayer].indexOf(segId);
+		// Segments that never settled stay at their last known slot
+		const effectiveLayer = Math.min(sLayer, maxGen);
+		const finalSlot = mappingByLayer[effectiveLayer].indexOf(segId);
 		lifecycles.push({ segId, settleLayer: sLayer, finalSlot, legs });
 	}
 
