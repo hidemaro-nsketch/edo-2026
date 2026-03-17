@@ -84,19 +84,17 @@ export class BuildSystem {
 	}
 
 	reset(plan: CompiledPlan): void {
-		Object.assign(this, {
-			plan,
-			settled: [],
-			settledByLayerCache: new Map(),
-			settledDirty: true,
-			blackFills: [],
-			committedBlackFills: new Map(),
-			collapsingLayer: -1,
-			collapseTimer: 0,
-			collapseStaggerTimer: 0,
-			currentSwipeDuration: this.pickSwipeDuration(),
-			state: { currentLayer: 1, phase: "swipe" as BuildPhase, phaseTime: 0 },
-		});
+		(this as { plan: CompiledPlan }).plan = plan;
+		this.settled = [];
+		this.settledByLayerCache = new Map();
+		this.settledDirty = true;
+		this.blackFills = [];
+		this.committedBlackFills = new Map();
+		this.collapsingLayer = -1;
+		this.collapseTimer = 0;
+		this.collapseStaggerTimer = 0;
+		this.currentSwipeDuration = this.pickSwipeDuration();
+		this.state = { currentLayer: 1, phase: "swipe", phaseTime: 0 };
 		this.syncBlackFillsForCurrentLayer();
 	}
 
@@ -304,7 +302,6 @@ export class BuildSystem {
 
 		const legs = this.plan.legsByLayer[currentLayer] ?? [];
 		const prevMapping = this.plan.mappingByLayer[currentLayer - 1];
-		const currMapping = this.plan.mappingByLayer[currentLayer];
 		const swipeProgress = this.getSwipeProgress();
 
 		const instances: SegmentInstance[] = [];
@@ -314,8 +311,7 @@ export class BuildSystem {
 
 			// "settle" legs: segment is being swapped to a new slot
 			// During swipe, render both old and new segment with wipe transition
-			const destSlot = currMapping.indexOf(leg.segId);
-			const oldSegId = prevMapping[destSlot];
+			const oldSegId = prevMapping[leg.destSlot];
 			if (oldSegId === leg.segId || swipeProgress >= 1 || phase !== "swipe") {
 				instances.push({
 					segId: leg.segId,

@@ -274,6 +274,9 @@ function writeInstances(
   dg.swipeProgress.needsUpdate = true;
 }
 
+/** Reusable sort buffer to avoid per-frame allocation */
+let sortBuffer: SegmentInstance[] = [];
+
 /** Sort instances back-to-front relative to camera for correct alpha blending */
 function sortBackToFront(
   instances: SegmentInstance[],
@@ -290,11 +293,19 @@ function sortBackToFront(
   const dy = viewDir.y;
   const dz = viewDir.z;
 
-  return [...instances].sort((a, b) => {
+  // Reuse buffer to avoid GC pressure
+  sortBuffer.length = 0;
+  for (let i = 0; i < instances.length; i++) {
+    sortBuffer[i] = instances[i];
+  }
+  sortBuffer.length = instances.length;
+
+  sortBuffer.sort((a, b) => {
     const depthA = (a.x - cx) * dx + (a.y - cy) * dy + (a.z - cz) * dz;
     const depthB = (b.x - cx) * dx + (b.y - cy) * dy + (b.z - cz) * dz;
     return depthB - depthA;
   });
+  return sortBuffer;
 }
 
 // ─── Base mesh (static layer 0) ─────────────────────────────────────────────

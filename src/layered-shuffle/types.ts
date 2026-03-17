@@ -28,6 +28,8 @@ export type ShuffleConfig = {
 	collapseStagger: number;
 	/** Pause duration after collapse before loop restart in seconds */
 	holdAfterComplete: number;
+	/** Minimum layer at which each category begins swapping (e.g. { sakura: 1, leaf: 4 }) */
+	categoryStartLayer: Record<string, number>;
 };
 
 /** A pair of slot indices to swap */
@@ -49,6 +51,8 @@ export type SegmentLeg = {
 	fromSize: [number, number];
 	/** End size [w, h] (object-fit contained for settle) */
 	toSize: [number, number];
+	/** Destination slot index at toLayer (pre-computed to avoid indexOf at runtime) */
+	destSlot: number;
 };
 
 /** Full lifecycle of one segment across all layers */
@@ -121,4 +125,5 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
 	collapseDuration: 0.2,
 	collapseStagger: 0.08,
 	holdAfterComplete: 1.0,
+	categoryStartLayer: { sakura: 1, leaf: 4, flower: 7 },
 };

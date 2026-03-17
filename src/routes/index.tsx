@@ -411,8 +411,18 @@ function Scene() {
 			collapseStagger: gui.collapseStagger ?? DEFAULT_CONFIG.collapseStagger,
 			holdAfterComplete:
 				gui.holdAfterComplete ?? DEFAULT_CONFIG.holdAfterComplete,
+			categoryStartLayer: DEFAULT_CONFIG.categoryStartLayer,
 		}),
-		[gui],
+		[
+			gui.maxGenerations,
+			gui.swipeDuration,
+			gui.swipeDurationJitter,
+			gui.holdDuration,
+			gui.layerSpacing,
+			gui.collapseDuration,
+			gui.collapseStagger,
+			gui.holdAfterComplete,
+		],
 	);
 
 	// セグメントがまだロードされていなければ何も描画しない

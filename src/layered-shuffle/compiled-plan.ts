@@ -72,17 +72,6 @@ function groupByCategory(segments: SegmentInfo[]): Map<number, number[]> {
 }
 
 /**
- * Minimum layer at which each category begins swapping.
- * Sakura starts immediately; leaf and flower are introduced later
- * so the animation builds up complexity gradually.
- */
-const CATEGORY_START_LAYER: Record<string, number> = {
-	sakura: 1,
-	leaf: 4,
-	flower: 7,
-};
-
-/**
  * Generate swap pairs for a given generation.
  * Swaps only occur between segments of the same category.
  * Each category starts swapping at its configured layer threshold.
@@ -90,8 +79,8 @@ const CATEGORY_START_LAYER: Record<string, number> = {
  */
 function generateSwapPairs(
 	gen: number,
-	_maxGenerations: number,
 	segments: SegmentInfo[],
+	categoryStartLayer: Record<string, number>,
 ): SwapPair[] {
 	const SWAPS_PER_CATEGORY = 1;
 	const categoryGroups = groupByCategory(segments);
@@ -101,7 +90,7 @@ function generateSwapPairs(
 
 	for (const [, slots] of categoryGroups) {
 		const catName = segments[slots[0]].categoryName;
-		const startLayer = CATEGORY_START_LAYER[catName] ?? 1;
+		const startLayer = categoryStartLayer[catName] ?? 1;
 		if (gen < startLayer) continue;
 		if (slots.length < 2) continue;
 
@@ -149,7 +138,7 @@ export function compilePlan(
 	// Each layer gets category-aware random swaps (sakura↔sakura, leaf↔leaf, etc.)
 	const swapsByLayer: SwapPair[][] = [[]]; // layer 0 = base, no swaps
 	for (let layer = 1; layer <= maxGen; layer++) {
-		swapsByLayer.push(generateSwapPairs(layer, maxGen, segments));
+		swapsByLayer.push(generateSwapPairs(layer, segments, config.categoryStartLayer));
 	}
 
 	// ── Step 2: Build cumulative slot→segment mappings ──
@@ -189,6 +178,15 @@ export function compilePlan(
 		}
 	}
 
+	// ── Step 3b: Build reverse mappings (segId → slot) for O(1) lookup ──
+	const reverseMappingByLayer: Map<number, number>[] = mappingByLayer.map(
+		(mapping) => {
+			const reverse = new Map<number, number>();
+			mapping.forEach((segId, slot) => reverse.set(segId, slot));
+			return reverse;
+		},
+	);
+
 	// ── Step 4: Build flight legs for every segment at every layer ──
 	// Each leg describes a segment's from/to position between consecutive layers.
 	// mode="settle" means the segment is being swapped; mode="pass" means it stays put.
@@ -207,14 +205,9 @@ export function compilePlan(
 		const sLayer = settleLayer[segId];
 		const legs: SegmentLeg[] = [];
 
-		// Find this segment's slot at each layer (including post-settle pass-through)
 		for (let layer = 1; layer <= maxGen; layer++) {
-			const prevMapping = mappingByLayer[layer - 1];
-			const currMapping = mappingByLayer[layer];
-
-			// Find which slot this segment is in at prev layer and current layer
-			const prevSlot = prevMapping.indexOf(segId);
-			const currSlot = currMapping.indexOf(segId);
+			const prevSlot = reverseMappingByLayer[layer - 1].get(segId)!;
+			const currSlot = reverseMappingByLayer[layer].get(segId)!;
 
 			const isSettle = layer === sLayer;
 			const mode: "pass" | "settle" = isSettle ? "settle" : "pass";
@@ -224,12 +217,10 @@ export function compilePlan(
 			const [toX, toY] = getSlotWorldPos(segments, currSlot);
 			const toZ = layer * config.layerSpacing;
 
-			// Size: from slot's size, to slot's size (with object-fit contain for settle)
 			const fromSlotSize = getSlotWorldSize(segments, prevSlot);
 			let toSlotSize = getSlotWorldSize(segments, currSlot);
 
 			if (mode === "settle" && prevSlot !== currSlot) {
-				// Object-fit contain: segment's original size fitting into destination slot
 				const segOrigSize = getSlotWorldSize(segments, segId);
 				toSlotSize = computeContainedSize(
 					segOrigSize[0],
@@ -247,6 +238,7 @@ export function compilePlan(
 				to: [toX, toY, toZ],
 				fromSize: fromSlotSize,
 				toSize: toSlotSize,
+				destSlot: currSlot,
 			};
 
 			legs.push(leg);
@@ -257,9 +249,8 @@ export function compilePlan(
 			settleIdsByLayer[sLayer].push(segId);
 		}
 
-		// Segments that never settled stay at their last known slot
 		const effectiveLayer = Math.min(sLayer, maxGen);
-		const finalSlot = mappingByLayer[effectiveLayer].indexOf(segId);
+		const finalSlot = reverseMappingByLayer[effectiveLayer].get(segId)!;
 		lifecycles.push({ segId, settleLayer: sLayer, finalSlot, legs });
 	}
 
