@@ -164,14 +164,13 @@ export class BuildSystem {
 		}
 		this.settledDirty = true;
 
-		// Persist black fills on the previous layer (where the segment was before the swap)
-		if (this.blackFills.length > 0) {
-			const prevLayer = layer - 1;
-			const existing = this.committedBlackFills.get(prevLayer);
+		// Persist black fills on the layer where each segment was actually rendered
+		for (const bf of this.blackFills) {
+			const existing = this.committedBlackFills.get(bf.sourceLayer);
 			if (existing) {
-				existing.push(...this.blackFills);
+				existing.push(bf);
 			} else {
-				this.committedBlackFills.set(prevLayer, [...this.blackFills]);
+				this.committedBlackFills.set(bf.sourceLayer, [bf]);
 			}
 		}
 
@@ -245,10 +244,9 @@ export class BuildSystem {
 	}
 
 	/** Create black fill instances from the plan's vacated slots for the current layer.
-	 *  Black fills are placed on the previous layer (where the segment was before the swap). */
+	 *  Each fill is placed on the layer where the departing segment is actually rendered. */
 	private syncBlackFillsForCurrentLayer(): void {
 		const layer = this.state.currentLayer;
-		const prevLayer = layer - 1;
 		const vacated = this.plan.vacatedByLayer[layer] ?? [];
 		this.blackFills = vacated.map((v) => ({
 			segId: v.segId,
@@ -257,7 +255,7 @@ export class BuildSystem {
 			z: v.position[2],
 			w: v.size[0],
 			h: v.size[1],
-			sourceLayer: prevLayer,
+			sourceLayer: v.sourceLayer,
 		}));
 	}
 

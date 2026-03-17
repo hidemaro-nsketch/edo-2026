@@ -72,10 +72,12 @@ export type VacatedSlot = {
 	slotIndex: number;
 	/** Segment ID that previously occupied this slot (for atlas UV lookup) */
 	segId: number;
-	/** World position [x, y, z] on the source layer */
+	/** World position [x, y, z] on the layer where the segment is actually rendered */
 	position: [number, number, number];
 	/** World size [w, h] matching bboxInSource */
 	size: [number, number];
+	/** Layer where the segment is actually rendered (black fill target) */
+	sourceLayer: number;
 };
 
 /** Pre-computed plan for the entire shuffle sequence */

@@ -257,33 +257,41 @@ export function compilePlan(
 	// ── Step 5: Build vacated slots for black fill rendering ──
 	// When a swap occurs, both slots become "vacated" — the previous occupant
 	// has moved away. These are rendered as black silhouettes (black fills)
-	// to show where the segment used to be.
+	// on the layer where the segment is actually visible.
+	// With slot-level change detection, a segment is only rendered on its
+	// settleLayer (first swap) or layer 0 (if never swapped before this point).
 	const vacatedByLayer: VacatedSlot[][] = [[]]; // layer 0 has no vacated slots
 	for (let layer = 1; layer <= maxGen; layer++) {
 		const vacated: VacatedSlot[] = [];
-		// Black fills appear on the previous layer (where the segment was before the swap)
-		const destZ = (layer - 1) * config.layerSpacing;
 
 		const prevMapping = mappingByLayer[layer - 1];
 		for (const [slotA, slotB] of swapsByLayer[layer]) {
-			// Slot A is vacated by the segment that was there (prevMapping[slotA])
+			// For each vacated slot, find the layer where the departing segment
+			// is actually rendered: its settleLayer if already swapped, else layer 0
+			const segIdA = prevMapping[slotA];
+			const srcLayerA =
+				settleLayer[segIdA] < layer ? settleLayer[segIdA] : 0;
 			const [axPos, ayPos] = getSlotWorldPos(segments, slotA);
 			const [aw, ah] = getSlotWorldSize(segments, slotA);
 			vacated.push({
 				slotIndex: slotA,
-				segId: prevMapping[slotA],
-				position: [axPos, ayPos, destZ],
+				segId: segIdA,
+				position: [axPos, ayPos, srcLayerA * config.layerSpacing],
 				size: [aw, ah],
+				sourceLayer: srcLayerA,
 			});
 
-			// Slot B is vacated by the segment that was there (prevMapping[slotB])
+			const segIdB = prevMapping[slotB];
+			const srcLayerB =
+				settleLayer[segIdB] < layer ? settleLayer[segIdB] : 0;
 			const [bxPos, byPos] = getSlotWorldPos(segments, slotB);
 			const [bw, bh] = getSlotWorldSize(segments, slotB);
 			vacated.push({
 				slotIndex: slotB,
-				segId: prevMapping[slotB],
-				position: [bxPos, byPos, destZ],
+				segId: segIdB,
+				position: [bxPos, byPos, srcLayerB * config.layerSpacing],
 				size: [bw, bh],
+				sourceLayer: srcLayerB,
 			});
 		}
 

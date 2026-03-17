@@ -483,33 +483,44 @@ export function SegmentMeshes({
     );
     writeInstances(activeGeo, activeInstances, segments);
 
-    // Determine which layer receives the active (not yet committed) black fills
-    const activeBfLayer = currentLayer - 1;
+    // Group active black fills by their sourceLayer (each fill targets the layer
+    // where the departing segment is actually rendered, not necessarily currentLayer-1)
+    const activeBfByLayer = new Map<number, BlackFillInstance[]>();
+    for (const bf of activeBlackFills) {
+      let arr = activeBfByLayer.get(bf.sourceLayer);
+      if (!arr) {
+        arr = [];
+        activeBfByLayer.set(bf.sourceLayer, arr);
+      }
+      arr.push(bf);
+    }
 
-    // Re-write base mesh (layer 0) when it has black fills from layer 1's swap
+    // Re-write base mesh (layer 0) with any black fills targeting it
     {
       let layer0BlackFills = committedBlackFills.get(0);
-      if (activeBfLayer === 0 && activeBlackFills.length > 0) {
+      const activeBf0 = activeBfByLayer.get(0);
+      if (activeBf0 && activeBf0.length > 0) {
         layer0BlackFills = layer0BlackFills
-          ? [...layer0BlackFills, ...activeBlackFills]
-          : activeBlackFills;
+          ? [...layer0BlackFills, ...activeBf0]
+          : activeBf0;
       }
       writeInstances(baseGeo, baseInstances, segments, layer0BlackFills);
     }
 
     // Write settled meshes: one per past layer, each with its own committed black fills.
-    // Active black fills (from current swipe) are placed on the previous layer's mesh.
+    // Active black fills are distributed to their respective sourceLayer meshes.
     for (let i = 0; i < layerCount; i++) {
       const layerIdx = i + 1;
       const layerInstances = settledByLayer.get(layerIdx) ?? [];
       const sorted = sortBackToFront(layerInstances, camera, viewDirRef.current);
 
-      // Merge committed black fills with active black fills for the previous layer
+      // Merge committed black fills with active black fills for this layer
       let layerBlackFills = committedBlackFills.get(layerIdx);
-      if (layerIdx === activeBfLayer && activeBlackFills.length > 0) {
+      const activeBfForLayer = activeBfByLayer.get(layerIdx);
+      if (activeBfForLayer && activeBfForLayer.length > 0) {
         layerBlackFills = layerBlackFills
-          ? [...layerBlackFills, ...activeBlackFills]
-          : activeBlackFills;
+          ? [...layerBlackFills, ...activeBfForLayer]
+          : activeBfForLayer;
       }
 
       writeInstances(settledPool.geos[i], sorted, segments, layerBlackFills);
