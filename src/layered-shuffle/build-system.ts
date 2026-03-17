@@ -190,6 +190,7 @@ export class BuildSystem {
 		this.state.phase = "preCollapse";
 		this.state.phaseTime = 0;
 		this.blackFills = [];
+		this.committedBlackFills.clear();
 	}
 
 	private updatePreCollapse(dt: number): void {
@@ -443,8 +444,20 @@ export class BuildSystem {
 	}
 
 	getConnectionLines(): ConnectionLine[] {
-		if (this.state.phase !== "collapsing") return [];
-		return this.getCollapseLines();
+		if (this.state.phase === "preCollapse") return this.getStaticLines();
+		if (this.state.phase === "collapsing") return this.getCollapseLines();
+		return [];
+	}
+
+	private getStaticLines(): ConnectionLine[] {
+		const lines: ConnectionLine[] = [];
+		for (let layer = 1; layer <= this.config.maxGenerations; layer++) {
+			for (const leg of this.plan.legsByLayer[layer] ?? []) {
+				if (!legMoves(leg)) continue;
+				lines.push({ from: leg.from, to: leg.to });
+			}
+		}
+		return lines;
 	}
 
 	private getCollapseLines(): ConnectionLine[] {
