@@ -118,11 +118,11 @@ export type BuildState = {
 
 /** Default configuration values */
 export const DEFAULT_CONFIG: ShuffleConfig = {
-	maxGenerations: 2,
-	swipeDuration: 2.2,
-	swipeDurationJitter: 0.25,
-	holdDuration: 1.4,
-	layerSpacing: 1.0,
+	maxGenerations: 10,
+	swipeDuration: 1.5,
+	swipeDurationJitter: 0.75,
+	holdDuration: 1.0,
+	layerSpacing: 2.0,
 	collapseDuration: 0.2,
 	collapseStagger: 0.08,
 	holdAfterComplete: 1.0,

@@ -106,15 +106,15 @@ function useDebugGui(): DebugGuiResult {
 
 	// セグメントが次の位置へ移動する際のアニメーション設定
 	const animation = useControls("Animation", {
-		swipeDuration: { value: 2.2, min: 0.1, max: 8, step: 0.1 }, // 移動にかかる秒数
-		swipeDurationJitter: { value: 0.25, min: 0, max: 0.8, step: 0.01 }, // ランダムなばらつき
-		holdDuration: { value: 1.4, min: 0, max: 10, step: 0.1 }, // 到着後に静止する秒数
+		swipeDuration: { value: 1.5, min: 0.1, max: 8, step: 0.1 }, // 移動にかかる秒数
+		swipeDurationJitter: { value: 0.75, min: 0, max: 0.8, step: 0.01 }, // ランダムなばらつき
+		holdDuration: { value: 1.0, min: 0, max: 10, step: 0.1 }, // 到着後に静止する秒数
 	});
 
 	// レイヤー構成の設定
 	const layers = useControls("Layers", {
-		maxGenerations: { value: 2, min: 1, max: 20, step: 1 }, // シャッフルの世代数（レイヤー数）
-		layerSpacing: { value: 1.5, min: 0.1, max: 4, step: 0.1 }, // レイヤー間の Z 軸距離
+		maxGenerations: { value: 10, min: 1, max: 20, step: 1 }, // シャッフルの世代数（レイヤー数）
+		layerSpacing: { value: 2.0, min: 0.1, max: 4, step: 0.1 }, // レイヤー間の Z 軸距離
 	});
 
 	// コラプスフェーズ（全レイヤーが最終位置に収束）の設定

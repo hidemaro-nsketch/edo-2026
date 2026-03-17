@@ -6,12 +6,15 @@ import { Vector3, MathUtils, OrthographicCamera } from "three";
 // Y offset to center on top half of kimono (KIMONO_SIZE / 4 = 1.3)
 export const Y_CENTER_OFFSET = 0.0;
 const TOP_DOWN_POSITION = new Vector3(0, Y_CENTER_OFFSET, 50);
-const OBLIQUE_POSITION = new Vector3(2, 0.0 + Y_CENTER_OFFSET,12);
 const TOP_DOWN_LOOK_AT = new Vector3(0, Y_CENTER_OFFSET, 0);
 
 // Zoom levels for orthographic camera
 const TOP_DOWN_ZOOM = 350;
-const OBLIQUE_ZOOM = 180;
+const OBLIQUE_ZOOM_BASE = 180;
+
+// Oblique camera base position (scaled by stack depth)
+const OBLIQUE_X = 2;
+const OBLIQUE_Y = Y_CENTER_OFFSET;
 
 // Damping rate: higher = faster convergence
 const DAMP_RATE = 3;
@@ -48,6 +51,7 @@ export function CameraRig({
   const targetPos = useRef(new Vector3());
   const targetLookAt = useRef(new Vector3());
   const currentLookAt = useRef(new Vector3(0, 0, 0));
+  const obliquePos = useRef(new Vector3());
   const obliqueLookAt = useRef(new Vector3());
   const currentZoom = useRef(TOP_DOWN_ZOOM);
 
@@ -71,11 +75,20 @@ export function CameraRig({
     // Smoothstep: 3t^2 - 2t^3
     const t = rawT * rawT * (3 - 2 * rawT);
 
-    // Oblique lookAt targets the vertical center of the layer stack
-    obliqueLookAt.current.set(0, 0, gen * layerSpacing * 0.5);
+    // Compute oblique position/zoom based on stack depth
+    // Gentle oblique: slightly from the side and above, looking down at the stack
+    const stackDepth = maxGenerations * layerSpacing;
+    const stackCenter = stackDepth * 0.5;
+    const obliqueX = stackDepth * 0.2;
+    const obliqueY = OBLIQUE_Y + 2;
+    const obliqueZ = stackCenter + stackDepth * 0.5;
+    const obliqueZoom = Math.max(60, OBLIQUE_ZOOM_BASE - stackDepth * 2.5);
+
+    obliquePos.current.set(obliqueX, obliqueY, obliqueZ);
+    obliqueLookAt.current.set(0, 0, stackCenter);
 
     // Interpolate position and lookAt between presets
-    targetPos.current.lerpVectors(TOP_DOWN_POSITION, OBLIQUE_POSITION, t);
+    targetPos.current.lerpVectors(TOP_DOWN_POSITION, obliquePos.current, t);
     targetLookAt.current.lerpVectors(
       TOP_DOWN_LOOK_AT,
       obliqueLookAt.current,
@@ -83,7 +96,7 @@ export function CameraRig({
     );
 
     // Interpolate zoom
-    const targetZoom = MathUtils.lerp(TOP_DOWN_ZOOM, OBLIQUE_ZOOM, t);
+    const targetZoom = MathUtils.lerp(TOP_DOWN_ZOOM, obliqueZoom, t);
 
     // Damped movement toward target for natural feel
     const dampFactor = 1 - Math.exp(-DAMP_RATE * delta);
