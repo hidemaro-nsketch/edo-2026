@@ -453,7 +453,7 @@ export class BuildSystem {
 		const lines: ConnectionLine[] = [];
 		for (let layer = 1; layer <= this.config.maxGenerations; layer++) {
 			for (const leg of this.plan.legsByLayer[layer] ?? []) {
-				if (!legMoves(leg)) continue;
+				if (leg.mode !== "settle") continue;
 				lines.push({ from: leg.from, to: leg.to });
 			}
 		}
@@ -470,7 +470,7 @@ export class BuildSystem {
 
 		const collapseLegs = this.plan.legsByLayer[this.collapsingLayer] ?? [];
 		for (const leg of collapseLegs) {
-			if (!legMoves(leg)) continue;
+			if (leg.mode !== "settle") continue;
 			const inst = interpolateLegReverse(leg, t);
 			lines.push({
 				from: [leg.to[0], leg.to[1], leg.to[2]],
@@ -481,22 +481,13 @@ export class BuildSystem {
 		for (let layer = this.collapsingLayer - 1; layer >= 1; layer--) {
 			const layerLegs = this.plan.legsByLayer[layer] ?? [];
 			for (const leg of layerLegs) {
-				if (!legMoves(leg)) continue;
+				if (leg.mode !== "settle") continue;
 				lines.push({ from: leg.from, to: leg.to });
 			}
 		}
 
 		return lines;
 	}
-}
-
-/** Check if a leg actually changes position (not a pass-through at same coords) */
-function legMoves(leg: SegmentLeg): boolean {
-	return (
-		leg.from[0] !== leg.to[0] ||
-		leg.from[1] !== leg.to[1] ||
-		leg.from[2] !== leg.to[2]
-	);
 }
 
 function easeOutCubic(t: number): number {
