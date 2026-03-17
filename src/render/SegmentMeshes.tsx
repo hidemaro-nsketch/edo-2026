@@ -34,6 +34,7 @@ import {
 import type { BlackFillInstance, BuildSystem, SegmentInstance } from "../layered-shuffle/build-system";
 import { KIMONO_SIZE } from "../sakura/constants";
 import type { SegmentInfo } from "../sakura/types";
+import type { DebugControls } from "../routes/index";
 
 // ─── Shaders ─────────────────────────────────────────────────────────────────
 
@@ -377,6 +378,7 @@ type SegmentMeshesProps = {
   segments: SegmentInfo[];
   atlasTexture: Texture;
   buildSystem: BuildSystem;
+  debugControls?: DebugControls;
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -385,6 +387,7 @@ export function SegmentMeshes({
   segments,
   atlasTexture,
   buildSystem,
+  debugControls,
 }: SegmentMeshesProps) {
   const { camera } = useThree();
   const viewDirRef = useRef(new Vector3());
@@ -424,7 +427,31 @@ export function SegmentMeshes({
 
   // ── Per-frame update: advance animation and write GPU buffers ──
   useFrame((_, delta) => {
-    buildSystem.update(delta);
+    // デバッグコントロール: 一時停止・ステップ実行・速度倍率
+    const paused = debugControls?.pausedRef.current ?? false;
+    const step = debugControls?.stepRef.current ?? false;
+    const speed = debugControls?.speedRef.current ?? 1.0;
+
+    if (paused && !step) {
+      // 一時停止中（ステップ要求なし）: update をスキップするが描画は続行
+    } else {
+      // ステップ実行時は 1/60 秒分だけ進める、通常時は delta × speed
+      const effectiveDelta = step ? 1 / 60 : delta * speed;
+      buildSystem.update(effectiveDelta);
+      if (step && debugControls) {
+        debugControls.stepRef.current = false;
+      }
+    }
+
+    // フェーズ情報を Leva Phase Monitor にリアルタイム反映
+    if (debugControls) {
+      const label = buildSystem.getDebugLabel();
+      debugControls.debugLabelRef.current = label;
+      debugControls.setMonitorRef.current({
+        status: label,
+        paused: debugControls.pausedRef.current,
+      });
+    }
 
     const currentLayer = buildSystem.getCurrentLayer();
     activeMeshRef.current.renderOrder = layerRenderOrder(currentLayer, "active");

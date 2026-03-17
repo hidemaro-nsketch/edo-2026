@@ -450,6 +450,12 @@ export class BuildSystem {
 		return this.state.currentLayer;
 	}
 
+	/** Debug info: formatted string for GUI display */
+	getDebugLabel(): string {
+		const { phase, currentLayer, phaseTime } = this.state;
+		return `L${currentLayer} | ${phase} | ${phaseTime.toFixed(2)}s`;
+	}
+
 	getConnectionLines(): ConnectionLine[] {
 		if (this.state.phase !== "collapsing") return [];
 		return this.getCollapseLines();
