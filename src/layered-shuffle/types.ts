@@ -14,8 +14,6 @@
 export type ShuffleConfig = {
 	/** Maximum number of shuffle generations */
 	maxGenerations: number;
-	/** Duration of black fill display before swipe begins in seconds */
-	preSwipeDuration: number;
 	/** Duration of swipe animation per layer in seconds */
 	swipeDuration: number;
 	/** Random variation ratio for swipe duration per layer (0..1) */
@@ -98,10 +96,8 @@ export type CompiledPlan = {
 
 /** Phase of the build state machine */
 export type BuildPhase =
-	| "preSwipe" // black fills visible before swipe begins
 	| "swipe" // horizontal wipe transition for swapped slots
-	| "hold" // brief pause after swipe
-	| "commit" // settling segments, advancing to next layer
+	| "hold" // brief pause after swipe (commit happens inline at end)
 	| "complete" // all layers built
 	| "preCollapse" // pause while camera moves to oblique
 	| "collapsing" // collapse animation
@@ -121,7 +117,6 @@ export type BuildState = {
 /** Default configuration values */
 export const DEFAULT_CONFIG: ShuffleConfig = {
 	maxGenerations: 2,
-	preSwipeDuration: 0.8,
 	swipeDuration: 2.2,
 	swipeDurationJitter: 0.25,
 	holdDuration: 1.4,

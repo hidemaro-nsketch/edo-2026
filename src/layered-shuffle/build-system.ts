@@ -78,7 +78,7 @@ export class BuildSystem {
 		this.plan = plan;
 		this.config = config;
 		this.segmentCount = plan.mappingByLayer[0].length;
-		this.state = { currentLayer: 1, phase: "preSwipe", phaseTime: 0 };
+		this.state = { currentLayer: 1, phase: "swipe", phaseTime: 0 };
 		this.currentSwipeDuration = this.pickSwipeDuration();
 		this.syncBlackFillsForCurrentLayer();
 	}
@@ -94,7 +94,7 @@ export class BuildSystem {
 		this.collapseTimer = 0;
 		this.collapseStaggerTimer = 0;
 		this.currentSwipeDuration = this.pickSwipeDuration();
-		this.state = { currentLayer: 1, phase: "preSwipe", phaseTime: 0 };
+		this.state = { currentLayer: 1, phase: "swipe", phaseTime: 0 };
 		this.syncBlackFillsForCurrentLayer();
 	}
 
@@ -107,17 +107,11 @@ export class BuildSystem {
 
 	update(deltaTime: number): void {
 		switch (this.state.phase) {
-			case "preSwipe":
-				this.updatePreSwipe(deltaTime);
-				return;
 			case "swipe":
 				this.updateSwipe(deltaTime);
 				return;
 			case "hold":
 				this.updateHold(deltaTime);
-				return;
-			case "commit":
-				this.commitLayer();
 				return;
 			case "collapsing":
 				this.updateCollapse(deltaTime);
@@ -134,14 +128,6 @@ export class BuildSystem {
 		}
 	}
 
-	private updatePreSwipe(dt: number): void {
-		this.state.phaseTime += dt;
-		if (this.state.phaseTime >= this.config.preSwipeDuration) {
-			this.state.phase = "swipe";
-			this.state.phaseTime = 0;
-		}
-	}
-
 	private updateSwipe(dt: number): void {
 		this.state.phaseTime += dt;
 		if (this.state.phaseTime >= this.currentSwipeDuration) {
@@ -153,8 +139,7 @@ export class BuildSystem {
 	private updateHold(dt: number): void {
 		this.state.phaseTime += dt;
 		if (this.state.phaseTime >= this.config.holdDuration) {
-			this.state.phase = "commit";
-			this.state.phaseTime = 0;
+			this.commitLayer();
 		}
 	}
 
@@ -196,7 +181,7 @@ export class BuildSystem {
 		}
 
 		this.state.currentLayer = layer + 1;
-		this.state.phase = "preSwipe";
+		this.state.phase = "swipe";
 		this.state.phaseTime = 0;
 		this.currentSwipeDuration = this.pickSwipeDuration();
 		this.syncBlackFillsForCurrentLayer();
@@ -311,7 +296,6 @@ export class BuildSystem {
 
 		if (phase === "collapsing") return this.getCollapseInstances();
 		if (
-			phase === "preSwipe" ||
 			phase === "preCollapse" ||
 			phase === "holding" ||
 			phase === "idle" ||
@@ -436,10 +420,10 @@ export class BuildSystem {
 		return this.settledByLayerCache;
 	}
 
-	/** Get black fills for the active layer (visible from preSwipe through hold, until commit) */
+	/** Get black fills for the active layer (visible during swipe and hold, until commit) */
 	getBlackFillInstances(): BlackFillInstance[] {
 		const { phase } = this.state;
-		if (phase === "preSwipe" || phase === "swipe" || phase === "hold") {
+		if (phase === "swipe" || phase === "hold") {
 			return this.blackFills;
 		}
 		return [];
