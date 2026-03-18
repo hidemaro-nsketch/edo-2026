@@ -472,21 +472,39 @@ function App() {
 	}, []);
 
 	return (
-		<div className="h-100vh min-h-[520px]">
+		<div
+			style={{
+				width: "100vw",
+				height: "100vh",
+				overflow: "hidden",
+				background: "black",
+				position: "relative",
+			}}
+		>
 			<Leva hidden={!guiVisible} />
-			<Canvas
-				orthographic
-				camera={{
-					position: [0, Y_CENTER_OFFSET, 50],
-					zoom: 10,
-					near: 0.1,
-					far: 200,
+			<div
+				style={{
+					position: "absolute",
+					top: 0,
+					left: 0,
+					width: 512,
+					height: 512,
 				}}
 			>
-				<color attach="background" args={["black"]} />
-				<OrbitControls />
-				<Scene />
-			</Canvas>
+				<Canvas
+					orthographic
+					camera={{
+						position: [0, Y_CENTER_OFFSET, 50],
+						zoom: 10,
+						near: 0.1,
+						far: 200,
+					}}
+				>
+					<color attach="background" args={["black"]} />
+					<OrbitControls />
+					<Scene />
+				</Canvas>
+			</div>
 		</div>
 	);
 }
