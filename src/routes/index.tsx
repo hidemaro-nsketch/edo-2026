@@ -478,7 +478,7 @@ function App() {
 				orthographic
 				camera={{
 					position: [0, Y_CENTER_OFFSET, 50],
-					zoom: 250,
+					zoom: 10,
 					near: 0.1,
 					far: 200,
 				}}
