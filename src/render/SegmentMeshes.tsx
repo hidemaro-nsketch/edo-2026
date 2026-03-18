@@ -20,12 +20,10 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import {
   Camera,
-  CustomBlending,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   Mesh,
-  OneFactor,
-  OneMinusSrcAlphaFactor,
+  NormalBlending,
   PlaneGeometry,
   ShaderMaterial,
   Vector3,
@@ -127,9 +125,11 @@ void main() {
   vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
   vec4 color = texture2D(uAtlas, atlasUv);
 
-  float edgeAlpha = smoothstep(0.0, 0.3, color.a);
-  float finalOpacity = edgeAlpha * vOpacity;
-  gl_FragColor = vec4(color.rgb * finalOpacity, color.a * finalOpacity);
+  float mask = step(0.01, color.a);
+  // 輝度ベースで黒/白を判定（smoothstepでアンチエイリアス）
+  float lum = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+  vec3 rgb = vec3(smoothstep(0.02, 0.25, lum));
+  gl_FragColor = vec4(rgb, mask * vOpacity);
 }
 `;
 
@@ -144,9 +144,7 @@ function createMaterial(atlas: Texture): ShaderMaterial {
     },
     transparent: true,
     depthWrite: false,
-    blending: CustomBlending,
-    blendSrc: OneFactor,
-    blendDst: OneMinusSrcAlphaFactor,
+    blending: NormalBlending,
   });
 }
 

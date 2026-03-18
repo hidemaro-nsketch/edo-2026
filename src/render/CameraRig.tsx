@@ -10,7 +10,7 @@ const TOP_DOWN_LOOK_AT = new Vector3(0, Y_CENTER_OFFSET, 0);
 
 // Zoom levels for orthographic camera
 const TOP_DOWN_ZOOM = 95;
-const OBLIQUE_ZOOM_BASE = 180;
+const OBLIQUE_ZOOM_BASE = 10;
 
 // Oblique camera base position (scaled by stack depth)
 const OBLIQUE_X = 2;
