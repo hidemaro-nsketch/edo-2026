@@ -10,11 +10,11 @@ const TOP_DOWN_LOOK_AT = new Vector3(0, Y_CENTER_OFFSET, 0);
 
 // Zoom levels for orthographic camera
 const TOP_DOWN_ZOOM = 95;
-const OBLIQUE_ZOOM_BASE = 10;
+const OBLIQUE_ZOOM = 50;
 
 // Oblique camera base position (scaled by stack depth)
-const OBLIQUE_X = 2;
 const OBLIQUE_Y = Y_CENTER_OFFSET;
+const OBLIQUE_Z_DEPTH_FACTOR = 0.7;
 
 // Damping rate: higher = faster convergence
 const DAMP_RATE = 3;
@@ -81,8 +81,8 @@ export function CameraRig({
     const stackCenter = stackDepth * 0.5;
     const obliqueX = stackDepth * 0.2;
     const obliqueY = OBLIQUE_Y + 2;
-    const obliqueZ = stackCenter + stackDepth * 0.5;
-    const obliqueZoom = Math.max(60, OBLIQUE_ZOOM_BASE - stackDepth * 2.5);
+    const obliqueZ = stackCenter + stackDepth * OBLIQUE_Z_DEPTH_FACTOR;
+    const obliqueZoom = OBLIQUE_ZOOM;
 
     obliquePos.current.set(obliqueX, obliqueY, obliqueZ);
     obliqueLookAt.current.set(0, 0, stackCenter);
