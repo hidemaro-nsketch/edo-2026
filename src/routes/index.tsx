@@ -18,7 +18,7 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
-import { button, useControls } from "leva"; // Leva: ブラウザ上のデバッグ GUI ライブラリ
+import { button, Leva, useControls } from "leva"; // Leva: ブラウザ上のデバッグ GUI ライブラリ
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system"; // シャッフルアニメーションの状態管理エンジン
@@ -459,8 +459,21 @@ function Scene() {
  * - 背景色は黒
  */
 function App() {
+	const [guiVisible, setGuiVisible] = useState(false);
+
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "g" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+				setGuiVisible((prev) => !prev);
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, []);
+
 	return (
 		<div className="h-100vh min-h-[520px]">
+			<Leva hidden={!guiVisible} />
 			<Canvas
 				orthographic
 				camera={{
