@@ -70,6 +70,19 @@ function DebugPage() {
 		if (!ctx) return;
 
 		drawTestPattern(ctx);
+
+		function handleKeyDown(e: KeyboardEvent) {
+			if (e.key !== "d") return;
+
+			const img = new Image();
+			img.onload = () => {
+				ctx.drawImage(img, PATTERN_X, PATTERN_Y, PATTERN_SIZE, PATTERN_SIZE);
+			};
+			img.src = "/sakura/kimono_bg_inv.jpg";
+		}
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, []);
 
 	return (
