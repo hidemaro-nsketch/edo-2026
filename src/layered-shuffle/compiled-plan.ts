@@ -217,7 +217,9 @@ export function compilePlan(
 	const reverseMappingByLayer: Map<number, number>[] = mappingByLayer.map(
 		(mapping) => {
 			const reverse = new Map<number, number>();
-			mapping.forEach((segId, slot) => reverse.set(segId, slot));
+			mapping.forEach((segId, slot) => {
+				reverse.set(segId, slot);
+			});
 			return reverse;
 		},
 	);
@@ -244,7 +246,7 @@ export function compilePlan(
 			const prevSlot = reverseMappingByLayer[layer - 1].get(segId)!;
 			const currSlot = reverseMappingByLayer[layer].get(segId)!;
 
-			const isSettle = layer === sLayer;
+			const isSettle = prevSlot !== currSlot;
 			const mode: "pass" | "settle" = isSettle ? "settle" : "pass";
 
 			const [fromX, fromY] = getSlotWorldPos(segments, prevSlot);
@@ -310,8 +312,7 @@ export function compilePlan(
 			// For each vacated slot, find the layer where the departing segment
 			// is actually rendered: its settleLayer if already swapped, else layer 0
 			const segIdA = prevMapping[slotA];
-			const srcLayerA =
-				settleLayer[segIdA] < layer ? settleLayer[segIdA] : 0;
+			const srcLayerA = settleLayer[segIdA] < layer ? settleLayer[segIdA] : 0;
 			const [axPos, ayPos] = getSlotWorldPos(segments, slotA);
 			const [aw, ah] = getSlotWorldSize(segments, slotA);
 			vacated.push({
@@ -323,8 +324,7 @@ export function compilePlan(
 			});
 
 			const segIdB = prevMapping[slotB];
-			const srcLayerB =
-				settleLayer[segIdB] < layer ? settleLayer[segIdB] : 0;
+			const srcLayerB = settleLayer[segIdB] < layer ? settleLayer[segIdB] : 0;
 			const [bxPos, byPos] = getSlotWorldPos(segments, slotB);
 			const [bw, bh] = getSlotWorldSize(segments, slotB);
 			vacated.push({
