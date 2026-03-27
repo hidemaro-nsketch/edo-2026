@@ -4,7 +4,7 @@
     "pages": [
       {
         "id": 0,
-        "file": "sakura_atlas_0.png",
+        "file": "sakurabackground_atlas_0.png",
         "width": 2048,
         "height": 2048
       }
@@ -16,997 +16,295 @@
   "categories": [
     {
       "id": 0,
-      "name": "sakura",
+      "name": "sakurabackground",
       "bit": 1
-    },
-    {
-      "id": 1,
-      "name": "leaf",
-      "bit": 2
-    },
-    {
-      "id": 2,
-      "name": "flower",
-      "bit": 4
     }
   ],
   "segments": [
     {
       "id": 0,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
       "categoryId": 0,
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.39209,
-        0.103027,
-        0.104492,
-        0.092773
+        0.304199,
+        0.0,
+        0.052734,
+        0.049805
       ],
       "pixelRect": [
-        803,
-        211,
-        214,
-        190
+        623,
+        0,
+        108,
+        102
       ],
       "trimmedSize": [
-        214,
-        190
+        108,
+        102
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        106,
-        200,
-        214,
-        190
+        163,
+        400,
+        108,
+        102
       ]
     },
     {
       "id": 1,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
       "categoryId": 0,
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.208984,
-        0.432129,
-        0.11084,
-        0.104492
+        0.0,
+        0.07373,
+        0.056152,
+        0.055664
       ],
       "pixelRect": [
-        428,
-        885,
-        227,
-        214
+        0,
+        151,
+        115,
+        114
       ],
       "trimmedSize": [
-        227,
-        214
+        115,
+        114
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        34,
-        515,
-        227,
-        214
+        457,
+        606,
+        115,
+        114
       ]
     },
     {
       "id": 2,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
+      "categoryId": 0,
+      "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.134766,
         0.304199,
-        0.060547,
-        0.052246
+        0.053711,
+        0.049316,
+        0.046387
       ],
       "pixelRect": [
-        276,
         623,
-        124,
-        107
+        110,
+        101,
+        95
       ],
       "trimmedSize": [
-        124,
-        107
+        101,
+        95
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        13,
-        701,
-        124,
-        107
+        599,
+        370,
+        101,
+        95
       ]
     },
     {
       "id": 3,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
+      "categoryId": 0,
+      "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.177246,
-        0.0,
-        0.080078,
-        0.1875
+        0.117676,
+        0.087891,
+        0.04541,
+        0.045898
       ],
       "pixelRect": [
-        363,
-        0,
-        164,
-        384
+        241,
+        180,
+        93,
+        94
       ],
       "trimmedSize": [
-        164,
-        384
+        93,
+        94
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        13,
-        500,
-        250,
-        586
+        805,
+        424,
+        93,
+        94
       ]
     },
     {
       "id": 4,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
+      "categoryId": 0,
+      "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.597656,
-        0.145508,
-        0.083984,
-        0.035645
+        0.0,
+        0.0,
+        0.137207,
+        0.069824
       ],
       "pixelRect": [
-        1224,
-        298,
-        172,
-        73
+        0,
+        0,
+        281,
+        143
       ],
       "trimmedSize": [
-        172,
-        73
+        281,
+        143
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        16,
-        450,
-        172,
-        73
+        20,
+        762,
+        281,
+        143
       ]
     },
     {
       "id": 5,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
+      "categoryId": 0,
+      "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
+        0.36084,
         0.0,
-        0.191406,
-        0.130859,
-        0.1875
+        0.05127,
+        0.050293
       ],
       "pixelRect": [
+        739,
         0,
-        392,
-        268,
-        384
+        105,
+        103
       ],
       "trimmedSize": [
-        268,
-        384
+        105,
+        103
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        234,
-        2,
-        274,
-        393
+        317,
+        697,
+        105,
+        103
       ]
     },
     {
       "id": 6,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
       "categoryId": 0,
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.191895,
-        0.76123,
-        0.131836,
-        0.108398
+        0.060059,
+        0.07373,
+        0.053711,
+        0.050293
       ],
       "pixelRect": [
-        393,
-        1559,
-        270,
-        222
+        123,
+        151,
+        110,
+        103
       ],
       "trimmedSize": [
-        270,
-        222
+        110,
+        103
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        236,
-        6,
-        270,
-        222
+        47,
+        324,
+        110,
+        103
       ]
     },
     {
       "id": 7,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
       "categoryId": 0,
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.390137,
         0.0,
-        0.105957,
-        0.099121
+        0.133301,
+        0.041504,
+        0.041992
       ],
       "pixelRect": [
-        799,
         0,
-        217,
-        203
+        273,
+        85,
+        86
       ],
       "trimmedSize": [
-        217,
-        203
+        85,
+        86
       ],
       "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        542,
-        174,
-        217,
-        203
-      ]
-    },
-    {
-      "id": 8,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.134766,
-        0.191406,
-        0.13916,
-        0.108887
-      ],
-      "pixelRect": [
-        276,
-        392,
-        285,
-        223
-      ],
-      "trimmedSize": [
-        285,
-        223
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        372,
-        337,
-        285,
-        223
-      ]
-    },
-    {
-      "id": 9,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.424316,
-        0.430664,
-        0.101562,
-        0.089844
-      ],
-      "pixelRect": [
-        869,
-        882,
-        208,
-        184
-      ],
-      "trimmedSize": [
-        208,
-        184
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1003,
-        321,
-        208,
-        184
-      ]
-    },
-    {
-      "id": 10,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.317383,
-        0.229492,
-        0.107422,
-        0.096191
-      ],
-      "pixelRect": [
-        650,
-        470,
-        220,
-        197
-      ],
-      "trimmedSize": [
-        220,
-        197
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        750,
-        480,
-        220,
-        197
-      ]
-    },
-    {
-      "id": 11,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.208984,
-        0.304199,
-        0.104492,
-        0.124023
-      ],
-      "pixelRect": [
-        428,
-        623,
-        214,
-        254
-      ],
-      "trimmedSize": [
-        214,
-        254
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        691,
-        789,
-        214,
-        254
-      ]
-    },
-    {
-      "id": 12,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.277832,
-        0.121582,
-        0.110352,
-        0.104004
-      ],
-      "pixelRect": [
-        569,
-        249,
-        226,
-        213
-      ],
-      "trimmedSize": [
-        226,
-        213
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        714,
-        1001,
-        226,
-        213
-      ]
-    },
-    {
-      "id": 13,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.193359,
-        0.548828,
-        0.108887,
-        0.124023
-      ],
-      "pixelRect": [
-        396,
-        1124,
-        223,
-        254
-      ],
-      "trimmedSize": [
-        223,
-        254
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1022,
-        784,
-        223,
-        254
-      ]
-    },
-    {
-      "id": 14,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.5,
-        0.0,
-        0.103027,
-        0.093262
-      ],
-      "pixelRect": [
         1024,
-        0,
-        211,
-        191
-      ],
-      "trimmedSize": [
-        211,
-        191
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1114,
-        480,
-        211,
-        191
-      ]
-    },
-    {
-      "id": 15,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.306152,
-        0.643066,
-        0.108398,
-        0.086426
-      ],
-      "pixelRect": [
-        627,
-        1317,
-        222,
-        177
-      ],
-      "trimmedSize": [
-        222,
-        177
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1336,
-        297,
-        222,
-        177
-      ]
-    },
-    {
-      "id": 16,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.317383,
-        0.32959,
-        0.105957,
-        0.097168
-      ],
-      "pixelRect": [
-        650,
-        675,
-        217,
-        199
-      ],
-      "trimmedSize": [
-        217,
-        199
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1412,
-        540,
-        217,
-        199
-      ]
-    },
-    {
-      "id": 17,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.500488,
-        0.097168,
-        0.093262,
-        0.089355
-      ],
-      "pixelRect": [
-        1025,
-        199,
-        191,
-        183
-      ],
-      "trimmedSize": [
-        191,
-        183
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1645,
-        148,
-        191,
-        183
-      ]
-    },
-    {
-      "id": 18,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.32373,
-        0.430664,
-        0.09668,
-        0.098145
-      ],
-      "pixelRect": [
-        663,
-        882,
-        198,
-        201
-      ],
-      "trimmedSize": [
-        198,
-        201
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1793,
-        385,
-        198,
-        201
-      ]
-    },
-    {
-      "id": 19,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.427246,
-        0.32959,
-        0.095215,
-        0.093262
-      ],
-      "pixelRect": [
-        875,
-        675,
-        195,
-        191
-      ],
-      "trimmedSize": [
-        195,
-        191
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1806,
-        607,
-        195,
-        191
-      ]
-    },
-    {
-      "id": 20,
-      "sourceImageId": "sakura1",
-      "categoryName": "sakura",
-      "categoryId": 0,
-      "categoryMask": 1,
-      "atlasPage": 0,
-      "uvRect": [
-        0.26123,
-        0.0,
-        0.125,
-        0.117676
-      ],
-      "pixelRect": [
-        535,
-        0,
-        256,
-        241
-      ],
-      "trimmedSize": [
-        256,
-        241
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1972,
-        201,
-        256,
-        241
-      ]
-    },
-    {
-      "id": 21,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
-      "atlasPage": 0,
-      "uvRect": [
-        0.526855,
-        0.19043,
-        0.085449,
-        0.062012
-      ],
-      "pixelRect": [
-        1079,
-        390,
-        175,
-        127
-      ],
-      "trimmedSize": [
-        175,
-        127
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        819,
-        279,
-        175,
-        127
-      ]
-    },
-    {
-      "id": 22,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
-      "atlasPage": 0,
-      "uvRect": [
-        0.193359,
-        0.676758,
-        0.098145,
-        0.069824
-      ],
-      "pixelRect": [
-        396,
-        1386,
-        201,
-        143
-      ],
-      "trimmedSize": [
-        201,
-        143
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        720,
-        103,
-        201,
-        143
-      ]
-    },
-    {
-      "id": 23,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
-      "atlasPage": 0,
-      "uvRect": [
-        0.277832,
-        0.229492,
-        0.029297,
-        0.044434
-      ],
-      "pixelRect": [
-        569,
-        470,
-        60,
-        91
-      ],
-      "trimmedSize": [
-        60,
-        91
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        505,
-        770,
-        60,
-        91
-      ]
-    },
-    {
-      "id": 24,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
-      "atlasPage": 0,
-      "uvRect": [
-        0.0,
-        0.952637,
-        0.061035,
-        0.034668
-      ],
-      "pixelRect": [
-        0,
-        1951,
-        125,
-        71
-      ],
-      "trimmedSize": [
-        125,
-        71
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        360,
-        680,
-        125,
-        71
-      ]
-    },
-    {
-      "id": 25,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
-      "atlasPage": 0,
-      "uvRect": [
-        0.064941,
-        0.952637,
-        0.030273,
-        0.034668
-      ],
-      "pixelRect": [
-        133,
-        1951,
-        62,
-        71
-      ],
-      "trimmedSize": [
-        62,
-        71
-      ],
-      "originalSize": [
-        2248,
-        1216
+        1024
       ],
       "pivot": [
         0.5,
@@ -1014,579 +312,157 @@
       ],
       "bboxInSource": [
         389,
-        832,
-        62,
-        71
+        53,
+        85,
+        86
       ]
     },
     {
-      "id": 26,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
+      "id": 8,
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
+      "categoryId": 0,
+      "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.101562,
-        0.569824,
-        0.087891,
-        0.1875
+        0.060059,
+        0.12793,
+        0.049805,
+        0.038574
       ],
       "pixelRect": [
-        208,
-        1167,
-        180,
-        384
+        123,
+        262,
+        102,
+        79
       ],
       "trimmedSize": [
-        180,
-        384
+        102,
+        79
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        362,
-        337,
-        297,
-        635
+        901,
+        52,
+        102,
+        79
       ]
     },
     {
-      "id": 27,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
+      "id": 9,
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
+      "categoryId": 0,
+      "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.606934,
+        0.141113,
         0.0,
-        0.033203,
-        0.081055
+        0.102539,
+        0.083984
       ],
       "pixelRect": [
-        1243,
+        289,
         0,
-        68,
-        166
+        210,
+        172
       ],
       "trimmedSize": [
-        68,
-        166
+        210,
+        172
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        502,
-        558,
-        68,
-        166
+        684,
+        815,
+        210,
+        172
       ]
     },
     {
-      "id": 28,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
+      "id": 10,
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
+      "categoryId": 0,
+      "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.191895,
-        0.873535,
-        0.135254,
-        0.098145
+        0.247559,
+        0.054199,
+        0.048828,
+        0.043457
       ],
       "pixelRect": [
-        393,
-        1789,
-        277,
-        201
+        507,
+        111,
+        100,
+        89
       ],
       "trimmedSize": [
-        277,
-        201
+        100,
+        89
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        478,
-        176,
-        277,
-        201
+        335,
+        466,
+        100,
+        89
       ]
     },
     {
-      "id": 29,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
+      "id": 11,
+      "sourceImageId": "replicate-prediction-635jk1gvksrga0cx3b4t3a836r",
+      "categoryId": 0,
+      "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.109863,
-        0.382812,
-        0.095215,
-        0.162109
-      ],
-      "pixelRect": [
-        225,
-        784,
-        195,
-        332
-      ],
-      "trimmedSize": [
-        195,
-        332
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        765,
-        482,
-        195,
-        332
-      ]
-    },
-    {
-      "id": 30,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
-      "atlasPage": 0,
-      "uvRect": [
-        0.597656,
-        0.097168,
-        0.080078,
-        0.044434
-      ],
-      "pixelRect": [
-        1224,
-        199,
-        164,
-        91
-      ],
-      "trimmedSize": [
-        164,
-        91
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        708,
-        670,
-        164,
-        91
-      ]
-    },
-    {
-      "id": 31,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
-      "atlasPage": 0,
-      "uvRect": [
-        0.644043,
+        0.247559,
         0.0,
-        0.04248,
-        0.063965
+        0.052734,
+        0.050293
       ],
       "pixelRect": [
-        1319,
+        507,
         0,
-        87,
-        131
+        108,
+        103
       ],
       "trimmedSize": [
-        87,
-        131
+        108,
+        103
       ],
       "originalSize": [
-        2248,
-        1216
+        1024,
+        1024
       ],
       "pivot": [
         0.5,
         0.5
       ],
       "bboxInSource": [
-        985,
-        459,
-        87,
-        131
-      ]
-    },
-    {
-      "id": 32,
-      "sourceImageId": "sakura1",
-      "categoryName": "leaf",
-      "categoryId": 1,
-      "categoryMask": 2,
-      "atlasPage": 0,
-      "uvRect": [
-        0.526367,
-        0.29248,
-        0.080566,
-        0.099121
-      ],
-      "pixelRect": [
-        1078,
-        599,
+        696,
         165,
-        203
-      ],
-      "trimmedSize": [
-        165,
-        203
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        844,
-        280,
-        165,
-        203
-      ]
-    },
-    {
-      "id": 33,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
-      "atlasPage": 0,
-      "uvRect": [
-        0.0,
-        0.0,
-        0.17334,
-        0.1875
-      ],
-      "pixelRect": [
-        0,
-        0,
-        355,
-        384
-      ],
-      "trimmedSize": [
-        355,
-        384
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1055,
-        478,
-        570,
-        617
-      ]
-    },
-    {
-      "id": 34,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
-      "atlasPage": 0,
-      "uvRect": [
-        0.0,
-        0.569824,
-        0.097656,
-        0.1875
-      ],
-      "pixelRect": [
-        0,
-        1167,
-        200,
-        384
-      ],
-      "trimmedSize": [
-        200,
-        384
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1020,
-        783,
-        226,
-        433
-      ]
-    },
-    {
-      "id": 35,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
-      "atlasPage": 0,
-      "uvRect": [
-        0.0,
-        0.382812,
-        0.105957,
-        0.183105
-      ],
-      "pixelRect": [
-        0,
-        784,
-        217,
-        375
-      ],
-      "trimmedSize": [
-        217,
-        375
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1412,
-        529,
-        217,
-        375
-      ]
-    },
-    {
-      "id": 36,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
-      "atlasPage": 0,
-      "uvRect": [
-        0.098633,
-        0.76123,
-        0.089355,
-        0.1875
-      ],
-      "pixelRect": [
-        202,
-        1559,
-        183,
-        384
-      ],
-      "trimmedSize": [
-        183,
-        384
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1799,
-        565,
-        203,
-        425
-      ]
-    },
-    {
-      "id": 37,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
-      "atlasPage": 0,
-      "uvRect": [
-        0.306152,
-        0.540527,
-        0.097168,
-        0.098633
-      ],
-      "pixelRect": [
-        627,
-        1107,
-        199,
-        202
-      ],
-      "trimmedSize": [
-        199,
-        202
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1793,
-        385,
-        199,
-        202
-      ]
-    },
-    {
-      "id": 38,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
-      "atlasPage": 0,
-      "uvRect": [
-        0.0,
-        0.76123,
-        0.094727,
-        0.1875
-      ],
-      "pixelRect": [
-        0,
-        1559,
-        194,
-        384
-      ],
-      "trimmedSize": [
-        194,
-        384
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1971,
-        155,
-        256,
-        507
-      ]
-    },
-    {
-      "id": 39,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
-      "atlasPage": 0,
-      "uvRect": [
-        0.428711,
-        0.199707,
-        0.094238,
-        0.088867
-      ],
-      "pixelRect": [
-        878,
-        409,
-        193,
-        182
-      ],
-      "trimmedSize": [
-        193,
-        182
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1644,
-        149,
-        193,
-        182
-      ]
-    },
-    {
-      "id": 40,
-      "sourceImageId": "sakura1",
-      "categoryName": "flower",
-      "categoryId": 2,
-      "categoryMask": 4,
-      "atlasPage": 0,
-      "uvRect": [
-        0.407227,
-        0.532715,
-        0.106934,
-        0.086914
-      ],
-      "pixelRect": [
-        834,
-        1091,
-        219,
-        178
-      ],
-      "trimmedSize": [
-        219,
-        178
-      ],
-      "originalSize": [
-        2248,
-        1216
-      ],
-      "pivot": [
-        0.5,
-        0.5
-      ],
-      "bboxInSource": [
-        1337,
-        297,
-        219,
-        178
+        108,
+        103
       ]
     }
   ]
