@@ -41,6 +41,7 @@ const SAKURA_BASE_PATH = "/sakura";
 /** "others" フォルダ: 別画像ソースのアトラス（レイアウトは sakura のまま、描画内容だけ差し替え） */
 const OTHERS_BASE_PATH = "/sakuraothers";
 const KIMONO_BG_PATH = "/kimono_bg_inv.jpg"; // 着物全体の背景画像（反転版）
+const INITIAL_PLAN_SEED = 42;
 
 // ─── Manifest loader ────────────────────────────────────────────────────────
 
@@ -300,17 +301,24 @@ function ShuffleContent({
 }: ShuffleContentProps) {
 	const systemRef = useRef<BuildSystem | null>(null);
 	const lastResetRef = useRef(0);
+	const nextPlanSeedRef = useRef(INITIAL_PLAN_SEED);
+
+	const createNextPlan = () => {
+		const plan = compilePlan(segments, config, nextPlanSeedRef.current);
+		nextPlanSeedRef.current += 1;
+		return plan;
+	};
 
 	// 初回: セグメント＋設定からプランをコンパイルし、BuildSystem を生成
 	if (!systemRef.current) {
-		const plan = compilePlan(segments, config, 42);
+		const plan = createNextPlan();
 		systemRef.current = new BuildSystem(plan, config, segments);
 	}
 
 	// GUI の Reset ボタン押下時: resetTrigger の変化を検知して再生成
 	if (resetTrigger !== lastResetRef.current) {
 		lastResetRef.current = resetTrigger;
-		const plan = compilePlan(segments, config, 42);
+		const plan = createNextPlan();
 		systemRef.current = new BuildSystem(plan, config, segments);
 	}
 
@@ -320,8 +328,8 @@ function ShuffleContent({
 		<>
 			<CameraAndLifecycle
 				buildSystem={system}
-				segments={segments}
 				config={config}
+				createNextPlan={createNextPlan}
 			/>
 			<SegmentMeshes
 				segments={segments}
@@ -348,19 +356,19 @@ function ShuffleContent({
  */
 function CameraAndLifecycle({
 	buildSystem,
-	segments,
 	config,
+	createNextPlan,
 }: {
 	buildSystem: BuildSystem;
-	segments: SegmentInfo[];
 	config: ShuffleConfig;
+	createNextPlan: () => ReturnType<typeof compilePlan>;
 }) {
 	const currentLayerRef = useRef(1);
 
 	useFrame(() => {
 		// アニメーション完了 → idle に遷移したら、新しいシャッフルプランで再開
 		if (buildSystem.state.phase === "idle") {
-			const plan = compilePlan(segments, config, 42);
+			const plan = createNextPlan();
 			buildSystem.reset(plan);
 			currentLayerRef.current = 1;
 		}
