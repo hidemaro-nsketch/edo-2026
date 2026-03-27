@@ -290,6 +290,13 @@ export class BuildSystem {
 	}
 
 	getCommittedBlackFills(): Map<number, BlackFillRenderInstance[]> {
+		if (
+			this.state.phase === "preCollapse" ||
+			this.state.phase === "collapsing"
+		) {
+			return new Map();
+		}
+
 		const maxSettledLayer = this.getMaxSettledLayer();
 		const fills = new Map<number, BlackFillRenderInstance[]>();
 
