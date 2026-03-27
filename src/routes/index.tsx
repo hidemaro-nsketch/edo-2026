@@ -38,6 +38,9 @@ export const Route = createFileRoute("/")({ component: App });
 
 /** public/ 配下の静的アセットのベースパス */
 const SAKURA_BASE_PATH = "/sakura";
+/** "others" フォルダ: 別画像ソースのアトラス（レイアウトは sakura のまま、描画内容だけ差し替え） */
+const OTHERS_BASE_PATH = "/sakuraothers";
+const KIMONO_BG_PATH = "/kimono_bg_inv.jpg"; // 着物全体の背景画像（反転版）
 
 // ─── Manifest loader ────────────────────────────────────────────────────────
 
@@ -46,14 +49,55 @@ const SAKURA_BASE_PATH = "/sakura";
  * マニフェストには各セグメントの位置・サイズ・アトラス内座標などが定義されている。
  * ロード失敗時は null を返し、画面は何も表示しない（静かに失敗）。
  */
-async function loadManifest(): Promise<SegmentManifest | null> {
+async function loadManifest(
+	basePath: string = SAKURA_BASE_PATH,
+): Promise<SegmentManifest | null> {
 	try {
-		const res = await fetch(`${SAKURA_BASE_PATH}/segments.manifest.json`);
+		const res = await fetch(`${basePath}/segments.manifest.json`);
 		if (!res.ok) return null;
 		return (await res.json()) as SegmentManifest;
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * 元のセグメント配列のレイアウト（bboxInSource, originalSize）を維持しつつ、
+ * 描画内容（uvRect, trimmedSize, pixelRect）を "others" マニフェストのセグメントに差し替える。
+ * others のセグメント数が足りない場合はサイクリックに再利用する。
+ */
+/** サイズ比がこの閾値を超えるペアはスワップしない（面積比） */
+const SWAP_SIZE_RATIO_MAX = 4.0;
+
+function mergeSegmentsWithOthersContent(
+	layoutSegments: SegmentInfo[],
+	contentSegments: SegmentInfo[],
+): SegmentInfo[] {
+	const area = (s: SegmentInfo) => s.originalSize[0] * s.originalSize[1];
+	const contentCount = contentSegments.length;
+
+	return layoutSegments.map((seg, i) => {
+		const content = contentSegments[i % contentCount];
+		const layoutArea = area(seg);
+		const contentArea = area(content);
+		const ratio =
+			contentArea > layoutArea
+				? contentArea / layoutArea
+				: layoutArea / contentArea;
+
+		// サイズ差が大きすぎる場合はスワップせず元のまま
+		if (ratio > SWAP_SIZE_RATIO_MAX) {
+			return seg;
+		}
+
+		return {
+			...seg,
+			uvRect: content.uvRect,
+			trimmedSize: content.trimmedSize,
+			pixelRect: content.pixelRect,
+			atlasPage: content.atlasPage,
+		};
+	});
 }
 
 // ─── Debug GUI ──────────────────────────────────────────────────────────────
@@ -106,6 +150,9 @@ function useDebugGui(): DebugGuiResult {
 
 	// セグメントが次の位置へ移動する際のアニメーション設定
 	const animation = useControls("Animation", {
+		flashCount: { value: 2, min: 0, max: 6, step: 1 },
+		flashOnDuration: { value: 0.08, min: 0.01, max: 0.5, step: 0.01 },
+		flashOffDuration: { value: 0.06, min: 0.0, max: 0.5, step: 0.01 },
 		swipeDuration: { value: 1.5, min: 0.1, max: 8, step: 0.1 }, // 移動にかかる秒数
 		swipeDurationJitter: { value: 0.75, min: 0, max: 0.8, step: 0.01 }, // ランダムなばらつき
 		holdDuration: { value: 1.0, min: 0, max: 10, step: 0.1 }, // 到着後に静止する秒数
@@ -115,6 +162,7 @@ function useDebugGui(): DebugGuiResult {
 	const layers = useControls("Layers", {
 		maxGenerations: { value: 10, min: 1, max: 20, step: 1 }, // シャッフルの世代数（レイヤー数）
 		layerSpacing: { value: 2.0, min: 0.1, max: 4, step: 0.1 }, // レイヤー間の Z 軸距離
+		contentStartLayer: { value: 5, min: 1, max: 20, step: 1 }, // othersアトラスを使い始めるレイヤー
 	});
 
 	// コラプスフェーズ（全レイヤーが最終位置に収束）の設定
@@ -180,6 +228,9 @@ function useDebugGui(): DebugGuiResult {
 		...animation,
 		...layers,
 		...collapse,
+		categoryStartLayer: DEFAULT_CONFIG.categoryStartLayer,
+		sourceImageStartLayer: DEFAULT_CONFIG.sourceImageStartLayer,
+		contentStartLayer: layers.contentStartLayer,
 		resetTrigger,
 		debugControls,
 	};
@@ -219,7 +270,9 @@ function KimonoBackground({
 
 type ShuffleContentProps = {
 	segments: SegmentInfo[];
+	originalSegments: SegmentInfo[];
 	atlasTexture: Texture;
+	othersAtlasTexture: Texture | null;
 	config: ShuffleConfig;
 	resetTrigger: number;
 	debugControls: DebugControls;
@@ -238,7 +291,9 @@ type ShuffleContentProps = {
  */
 function ShuffleContent({
 	segments,
+	originalSegments,
 	atlasTexture,
+	othersAtlasTexture,
 	config,
 	resetTrigger,
 	debugControls,
@@ -270,7 +325,10 @@ function ShuffleContent({
 			/>
 			<SegmentMeshes
 				segments={segments}
+				originalSegments={originalSegments}
 				atlasTexture={atlasTexture}
+				othersAtlasTexture={othersAtlasTexture}
+				contentStartLayer={config.contentStartLayer}
 				buildSystem={system}
 				debugControls={debugControls}
 			/>
@@ -310,8 +368,11 @@ function CameraAndLifecycle({
 		// 現在レイヤーを ref 経由で CameraRig に伝達（setState を避けてパフォーマンス維持）
 		// カメラの斜め移行は preCollapse 以降のみ。swipe/hold 中は maxGenerations 未満に抑える
 		const { phase, currentLayer } = buildSystem.state;
-		const isPostComplete = phase === "preCollapse" || phase === "collapsing" || phase === "holding";
-		currentLayerRef.current = isPostComplete ? currentLayer : Math.min(currentLayer, config.maxGenerations - 1);
+		const isPostComplete =
+			phase === "preCollapse" || phase === "collapsing" || phase === "holding";
+		currentLayerRef.current = isPostComplete
+			? currentLayer
+			: Math.min(currentLayer, config.maxGenerations - 1);
 	});
 
 	return (
@@ -339,7 +400,11 @@ function CameraAndLifecycle({
  */
 function Scene() {
 	const [segments, setSegments] = useState<SegmentInfo[]>([]);
+	const [originalSegments, setOriginalSegments] = useState<SegmentInfo[]>([]);
 	const [atlasTexture, setAtlasTexture] = useState<Texture | null>(null);
+	const [othersAtlasTexture, setOthersAtlasTexture] = useState<Texture | null>(
+		null,
+	);
 	const [kimonoTexture, setKimonoTexture] = useState<Texture | null>(null);
 	const gui = useDebugGui();
 
@@ -348,32 +413,69 @@ function Scene() {
 		const textures: Texture[] = []; // クリーンアップ対象のテクスチャを蓄積
 
 		async function init() {
-			// ① マニフェスト読み込み
-			const manifest = await loadManifest();
-			if (!manifest || disposed) return;
+			// ① 両マニフェスト読み込み（レイアウト用 + 描画内容用）
+			const [layoutManifest, contentManifest] = await Promise.all([
+				loadManifest(SAKURA_BASE_PATH),
+				loadManifest(OTHERS_BASE_PATH),
+			]);
+			if (!layoutManifest || disposed) return;
 
-			setSegments(manifest.segments);
+			// 元のセグメント（レイアウト＋元のUV）を保持
+			setOriginalSegments(layoutManifest.segments);
 
-			// ② アトラステクスチャ読み込み（セグメント画像のスプライトシート）
+			// others マニフェストがあれば描画内容を差し替え、なければ元のまま
+			if (contentManifest) {
+				const merged = mergeSegmentsWithOthersContent(
+					layoutManifest.segments,
+					contentManifest.segments,
+				);
+				setSegments(merged);
+				console.log(
+					`Merged: ${layoutManifest.segments.length} layout slots ` +
+						`with ${contentManifest.segments.length} content segments`,
+				);
+			} else {
+				setSegments(layoutManifest.segments);
+				console.warn("Others manifest not found, using original segments");
+			}
+
+			// ② アトラステクスチャ読み込み — 元のアトラスは常にロード
 			try {
 				const loaded = await loadAtlasTextures(
-					manifest,
+					layoutManifest,
 					`${SAKURA_BASE_PATH}/atlas`,
 				);
 				if (disposed) return;
 				textures.push(...loaded);
 				if (loaded.length > 0) {
-					setAtlasTexture(loaded[0]); // 最初のアトラスページを使用
+					setAtlasTexture(loaded[0]);
 				}
 			} catch (err) {
-				console.warn("Atlas loading failed:", err);
+				console.warn("Layout atlas loading failed:", err);
+			}
+
+			// others アトラスも別途ロード（contentStartLayer 以降で使用）
+			if (contentManifest) {
+				try {
+					const loaded = await loadAtlasTextures(
+						contentManifest,
+						`${OTHERS_BASE_PATH}/atlas`,
+					);
+					if (disposed) return;
+					textures.push(...loaded);
+					if (loaded.length > 0) {
+						setOthersAtlasTexture(loaded[0]);
+					}
+				} catch (err) {
+					console.warn("Others atlas loading failed:", err);
+				}
 			}
 
 			// ③ 着物全体の背景画像を読み込み（反転版）
 			try {
 				const loader = new TextureLoader();
 				const bgTex = await loader.loadAsync(
-					`${SAKURA_BASE_PATH}/kimono_bg_inv.jpg`,
+					`${KIMONO_BG_PATH}`,
 				);
 				if (disposed) return;
 				bgTex.colorSpace = SRGBColorSpace; // sRGB 色空間を明示（色味の正確性のため）
@@ -385,7 +487,7 @@ function Scene() {
 
 			if (!disposed) {
 				console.log(
-					`Loaded: ${manifest.segments.length} segments, kimono background`,
+					`Loaded: ${layoutManifest.segments.length} segments, kimono background`,
 				);
 			}
 		}
@@ -405,6 +507,9 @@ function Scene() {
 	const config: ShuffleConfig = useMemo(
 		() => ({
 			maxGenerations: gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations,
+			flashCount: gui.flashCount ?? DEFAULT_CONFIG.flashCount,
+			flashOnDuration: gui.flashOnDuration ?? DEFAULT_CONFIG.flashOnDuration,
+			flashOffDuration: gui.flashOffDuration ?? DEFAULT_CONFIG.flashOffDuration,
 			swipeDuration: gui.swipeDuration ?? DEFAULT_CONFIG.swipeDuration,
 			swipeDurationJitter:
 				gui.swipeDurationJitter ?? DEFAULT_CONFIG.swipeDurationJitter,
@@ -415,9 +520,15 @@ function Scene() {
 			holdAfterComplete:
 				gui.holdAfterComplete ?? DEFAULT_CONFIG.holdAfterComplete,
 			categoryStartLayer: DEFAULT_CONFIG.categoryStartLayer,
+			sourceImageStartLayer: DEFAULT_CONFIG.sourceImageStartLayer,
+			contentStartLayer:
+				gui.contentStartLayer ?? DEFAULT_CONFIG.contentStartLayer,
 		}),
 		[
 			gui.maxGenerations,
+			gui.flashCount,
+			gui.flashOnDuration,
+			gui.flashOffDuration,
 			gui.swipeDuration,
 			gui.swipeDurationJitter,
 			gui.holdDuration,
@@ -425,6 +536,7 @@ function Scene() {
 			gui.collapseDuration,
 			gui.collapseStagger,
 			gui.holdAfterComplete,
+			gui.contentStartLayer,
 		],
 	);
 
@@ -433,11 +545,13 @@ function Scene() {
 
 	return (
 		<>
-			{/* <KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} /> */}
+			<KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} />
 			{atlasTexture && (
 				<ShuffleContent
 					segments={segments}
+					originalSegments={originalSegments}
 					atlasTexture={atlasTexture}
+					othersAtlasTexture={othersAtlasTexture}
 					config={config}
 					resetTrigger={gui.resetTrigger}
 					debugControls={gui.debugControls}
