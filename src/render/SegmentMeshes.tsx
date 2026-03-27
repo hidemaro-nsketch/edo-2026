@@ -551,7 +551,7 @@ export function SegmentMeshes({
 
 		// Gather all render data from BuildSystem
 		const settledByLayer = buildSystem.getSettledByLayer();
-		const activeBlackFills = buildSystem.getBlackFillInstances(); // current layer's swap → placed on prev layer
+		const activeBlackFills = buildSystem.getBlackFillInstances(); // current layer's swap → placed on the immediately previous layer
 		const committedBlackFills = buildSystem.getCommittedBlackFills(); // past layers' preserved fills
 
 		// Write active mesh: currently-animating segments (no black fills here — they go on prev layer)
@@ -566,8 +566,8 @@ export function SegmentMeshes({
 			currentLayer >= contentStartLayer ? segments : originalSegments,
 		);
 
-		// Group active black fills by their sourceLayer (each fill targets the layer
-		// where the departing segment is actually rendered, not necessarily currentLayer-1)
+		// Group active black fills by their sourceLayer (the layer that should be
+		// masked, which is now always the immediately previous layer)
 		const activeBfByLayer = new Map<number, BlackFillRenderInstance[]>();
 		for (const bf of activeBlackFills) {
 			let arr = activeBfByLayer.get(bf.sourceLayer);

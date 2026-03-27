@@ -100,6 +100,7 @@ export type BlackFillRenderInstance = {
 	z: number;
 	w: number;
 	h: number;
+	/** Layer that receives the black fill (normally the immediately previous layer) */
 	sourceLayer: number;
 	useOthersAtlas: number;
 };
@@ -114,7 +115,7 @@ export type VacatedSlot = {
 	position: [number, number, number];
 	/** World size [w, h] matching bboxInSource */
 	size: [number, number];
-	/** Layer where the segment is actually rendered (black fill target) */
+	/** Layer that receives the black fill (normally the immediately previous layer) */
 	sourceLayer: number;
 };
 

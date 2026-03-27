@@ -300,19 +300,16 @@ export function compilePlan(
 	// ── Step 5: Build vacated slots for black fill rendering ──
 	// When a swap occurs, both slots become "vacated" — the previous occupant
 	// has moved away. These are rendered as black silhouettes (black fills)
-	// on the layer where the segment is actually visible.
-	// With slot-level change detection, a segment is only rendered on its
-	// settleLayer (first swap) or layer 0 (if never swapped before this point).
+	// on the immediately previous layer so the just-changed slot is masked at
+	// the layer transition boundary.
 	const vacatedByLayer: VacatedSlot[][] = [[]]; // layer 0 has no vacated slots
 	for (let layer = 1; layer <= maxGen; layer++) {
 		const vacated: VacatedSlot[] = [];
 
 		const prevMapping = mappingByLayer[layer - 1];
 		for (const [slotA, slotB] of swapsByLayer[layer]) {
-			// For each vacated slot, find the layer where the departing segment
-			// is actually rendered: its settleLayer if already swapped, else layer 0
 			const segIdA = prevMapping[slotA];
-			const srcLayerA = settleLayer[segIdA] < layer ? settleLayer[segIdA] : 0;
+			const srcLayerA = layer - 1;
 			const [axPos, ayPos] = getSlotWorldPos(segments, slotA);
 			const [aw, ah] = getSlotWorldSize(segments, slotA);
 			vacated.push({
@@ -324,7 +321,7 @@ export function compilePlan(
 			});
 
 			const segIdB = prevMapping[slotB];
-			const srcLayerB = settleLayer[segIdB] < layer ? settleLayer[segIdB] : 0;
+			const srcLayerB = layer - 1;
 			const [bxPos, byPos] = getSlotWorldPos(segments, slotB);
 			const [bw, bh] = getSlotWorldSize(segments, slotB);
 			vacated.push({

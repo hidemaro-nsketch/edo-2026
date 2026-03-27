@@ -154,7 +154,7 @@ function drawSegmentAtSlot(
  *   1. Kimono background
  *   2. Base layer: all segments at identity positions (sakura atlas)
  *   3. For each layer 1..N (bottom to top):
- *      a. Black fills — cover vacated slots on their source layer
+ *      a. Black fills — cover vacated slots on the immediately previous layer
  *      b. Settled segments — swapped segments at their new positions
  *   4. Debug overlays (slot boundaries, swap highlights, labels)
  */
