@@ -179,7 +179,16 @@ INIT → [SHUFFLE gen1 → FREEZE] → ... → [SHUFFLE gen10 → FREEZE]
      → LOOP (restart from INIT)
 ```
 
+### Flash Reintroduction (2026-03-18)
+
+- Reintroduce only the lightweight bbox flash effect, not the older flight/buildStagger pipeline.
+- Each layer now follows `flash -> swipe -> hold -> commit`, where flash renders bbox outlines only for `settle` legs on that layer.
+- `preCollapse` also reuses bbox outlines, flashing all settled segments before collapse while keeping the current camera reveal timing.
+- The current swipe-based state machine and per-layer instanced rendering remain unchanged to minimize regression risk.
+- Flash timing is controlled through `ShuffleConfig` and Leva (`flashCount`, `flashOnDuration`, `flashOffDuration`).
+
 ## Changelog
 
+- 2026-03-18: Reintroduced lightweight bbox flash before swipe and during pre-collapse without restoring the legacy flight pipeline.
 - 2026-02-26: Layered shuffle architecture (Codex consultation). Per-layer instancing, connection lines, camera rig.
 - 2026-02-18: Initial architecture design (Codex consultation). Paged atlas + data textures + bitmask filtering.

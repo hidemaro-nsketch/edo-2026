@@ -5,7 +5,7 @@
  * Manages the phase lifecycle and produces render-ready instance data each frame.
  *
  * Phase lifecycle (per cycle):
- *   swipe → hold → commit → (next layer or preCollapse)
+ *   flash → swipe → hold → commit → (next layer or preCollapse)
  *   preCollapse → collapsing → holding → idle → (restart with new plan)
  *
  * Key concepts:
@@ -16,7 +16,6 @@
  */
 
 import type {
-	BuildPhase,
 	BuildState,
 	CompiledPlan,
 	SegmentLeg,
@@ -78,7 +77,7 @@ export class BuildSystem {
 		this.plan = plan;
 		this.config = config;
 		this.segmentCount = plan.mappingByLayer[0].length;
-		this.state = { currentLayer: 1, phase: "swipe", phaseTime: 0 };
+		this.state = { currentLayer: 1, phase: "flash", phaseTime: 0 };
 		this.currentSwipeDuration = this.pickSwipeDuration();
 		this.syncBlackFillsForCurrentLayer();
 	}
@@ -94,8 +93,29 @@ export class BuildSystem {
 		this.collapseTimer = 0;
 		this.collapseStaggerTimer = 0;
 		this.currentSwipeDuration = this.pickSwipeDuration();
-		this.state = { currentLayer: 1, phase: "swipe", phaseTime: 0 };
+		this.state = { currentLayer: 1, phase: "flash", phaseTime: 0 };
 		this.syncBlackFillsForCurrentLayer();
+	}
+
+	private getFlashDuration(): number {
+		return (
+			this.config.flashCount *
+			(this.config.flashOnDuration + this.config.flashOffDuration)
+		);
+	}
+
+	private isFlashVisible(time: number): boolean {
+		const cycleDuration =
+			this.config.flashOnDuration + this.config.flashOffDuration;
+		if (this.config.flashCount <= 0 || cycleDuration <= 0) return false;
+		const cyclePos = time % cycleDuration;
+		return cyclePos < this.config.flashOnDuration;
+	}
+
+	private getFlashTargetsForLayer(layer: number): SegmentLeg[] {
+		return (this.plan.legsByLayer[layer] ?? []).filter(
+			(leg) => leg.mode === "settle",
+		);
 	}
 
 	private pickSwipeDuration(): number {
@@ -107,6 +127,9 @@ export class BuildSystem {
 
 	update(deltaTime: number): void {
 		switch (this.state.phase) {
+			case "flash":
+				this.updateFlash(deltaTime);
+				return;
 			case "swipe":
 				this.updateSwipe(deltaTime);
 				return;
@@ -125,6 +148,21 @@ export class BuildSystem {
 			case "complete":
 			case "idle":
 				return;
+		}
+	}
+
+	private updateFlash(dt: number): void {
+		const flashTargets = this.getFlashTargetsForLayer(this.state.currentLayer);
+		if (flashTargets.length === 0 || this.getFlashDuration() <= 0) {
+			this.state.phase = "swipe";
+			this.state.phaseTime = 0;
+			return;
+		}
+
+		this.state.phaseTime += dt;
+		if (this.state.phaseTime >= this.getFlashDuration()) {
+			this.state.phase = "swipe";
+			this.state.phaseTime = 0;
 		}
 	}
 
@@ -180,7 +218,7 @@ export class BuildSystem {
 		}
 
 		this.state.currentLayer = layer + 1;
-		this.state.phase = "swipe";
+		this.state.phase = "flash";
 		this.state.phaseTime = 0;
 		this.currentSwipeDuration = this.pickSwipeDuration();
 		this.syncBlackFillsForCurrentLayer();
@@ -195,9 +233,50 @@ export class BuildSystem {
 
 	private updatePreCollapse(dt: number): void {
 		this.state.phaseTime += dt;
-		if (this.state.phaseTime >= this.config.holdAfterComplete) {
+		if (this.state.phaseTime >= this.getPreCollapseDuration()) {
 			this.startCollapse();
 		}
+	}
+
+	private getPreCollapseDuration(): number {
+		return Math.max(this.getFlashDuration(), this.config.holdAfterComplete);
+	}
+
+	private getLayerFlashInstances(): SegmentInstance[] {
+		if (!this.isFlashVisible(this.state.phaseTime)) return [];
+
+		return this.getFlashTargetsForLayer(this.state.currentLayer).map((leg) => ({
+			segId: leg.segId,
+			x: leg.to[0],
+			y: leg.to[1],
+			z: leg.to[2],
+			w: leg.toSize[0],
+			h: leg.toSize[1],
+			wipeRole: 0,
+			isBboxOutline: 1,
+			swipeProgress: 0,
+		}));
+	}
+
+	private getPreCollapseFlashInstances(): SegmentInstance[] {
+		if (
+			this.state.phaseTime >= this.getFlashDuration() ||
+			!this.isFlashVisible(this.state.phaseTime)
+		) {
+			return [];
+		}
+
+		return this.settled.map((s) => ({
+			segId: s.segId,
+			x: s.x,
+			y: s.y,
+			z: s.z,
+			w: s.w,
+			h: s.h,
+			wipeRole: 0,
+			isBboxOutline: 1,
+			swipeProgress: 0,
+		}));
 	}
 
 	private startCollapse(): void {
@@ -294,12 +373,9 @@ export class BuildSystem {
 		const { currentLayer, phase } = this.state;
 
 		if (phase === "collapsing") return this.getCollapseInstances();
-		if (
-			phase === "preCollapse" ||
-			phase === "holding" ||
-			phase === "idle" ||
-			phase === "complete"
-		) {
+		if (phase === "flash") return this.getLayerFlashInstances();
+		if (phase === "preCollapse") return this.getPreCollapseFlashInstances();
+		if (phase === "holding" || phase === "idle" || phase === "complete") {
 			return [];
 		}
 
