@@ -303,14 +303,14 @@ function ShuffleContent({
 
 	// 初回: セグメント＋設定からプランをコンパイルし、BuildSystem を生成
 	if (!systemRef.current) {
-		const plan = compilePlan(segments, config);
+		const plan = compilePlan(segments, config, 42);
 		systemRef.current = new BuildSystem(plan, config);
 	}
 
 	// GUI の Reset ボタン押下時: resetTrigger の変化を検知して再生成
 	if (resetTrigger !== lastResetRef.current) {
 		lastResetRef.current = resetTrigger;
-		const plan = compilePlan(segments, config);
+		const plan = compilePlan(segments, config, 42);
 		systemRef.current = new BuildSystem(plan, config);
 	}
 
@@ -360,7 +360,7 @@ function CameraAndLifecycle({
 	useFrame(() => {
 		// アニメーション完了 → idle に遷移したら、新しいシャッフルプランで再開
 		if (buildSystem.state.phase === "idle") {
-			const plan = compilePlan(segments, config);
+			const plan = compilePlan(segments, config, 42);
 			buildSystem.reset(plan);
 			currentLayerRef.current = 1;
 		}

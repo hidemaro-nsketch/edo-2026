@@ -28,6 +28,21 @@ import type {
 	VacatedSlot,
 } from "./types";
 
+// ─── Seeded PRNG (mulberry32) ────────────────────────────────────────────────
+
+/** Simple seeded 32-bit PRNG. Returns a function that produces [0, 1) on each call. */
+function mulberry32(seed: number): () => number {
+	let s = seed | 0;
+	return () => {
+		s = (s + 0x6d2b79f5) | 0;
+		let t = Math.imul(s ^ (s >>> 15), 1 | s);
+		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 /**
  * Check if two slots' bounding boxes overlap in the source image.
  * Overlapping slots cannot be swapped (their visuals would collide).
@@ -82,6 +97,7 @@ function generateSwapPairs(
 	segments: SegmentInfo[],
 	categoryStartLayer: Record<string, number>,
 	sourceImageStartLayer: Record<string, number>,
+	random: () => number = Math.random,
 ): SwapPair[] {
 	const SWAPS_PER_CATEGORY = 1;
 	const categoryGroups = groupByCategory(segments);
@@ -106,7 +122,7 @@ function generateSwapPairs(
 		// Shuffle slots for randomness
 		const shuffled = [...eligibleSlots];
 		for (let i = shuffled.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
+			const j = Math.floor(random() * (i + 1));
 			[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
 		}
 
@@ -139,9 +155,11 @@ function generateSwapPairs(
 export function compilePlan(
 	segments: SegmentInfo[],
 	config: ShuffleConfig,
+	seed?: number,
 ): CompiledPlan {
 	const count = segments.length;
 	const maxGen = config.maxGenerations;
+	const random = seed != null ? mulberry32(seed) : Math.random;
 
 	// ── Step 1: Generate swap pairs for each layer ──
 	// Each layer gets category-aware random swaps (sakura↔sakura, leaf↔leaf, etc.)
@@ -153,6 +171,7 @@ export function compilePlan(
 				segments,
 				config.categoryStartLayer,
 				config.sourceImageStartLayer,
+				random,
 			),
 		);
 	}
@@ -237,10 +256,16 @@ export function compilePlan(
 			let toSlotSize = getSlotWorldSize(segments, currSlot);
 
 			if (mode === "settle" && prevSlot !== currSlot) {
-				const segOrigSize = getSlotWorldSize(segments, segId);
+				// Choose content dimensions based on which atlas is used at this layer.
+				// Layers >= contentStartLayer render "others" atlas content (trimmedSize),
+				// while lower layers render the original sakura content (bboxInSource).
+				const useOthersContent = layer >= config.contentStartLayer;
+				const contentSize: [number, number] = useOthersContent
+					? segments[segId].trimmedSize
+					: [segments[segId].bboxInSource[2], segments[segId].bboxInSource[3]];
 				toSlotSize = computeContainedSize(
-					segOrigSize[0],
-					segOrigSize[1],
+					contentSize[0],
+					contentSize[1],
 					toSlotSize[0],
 					toSlotSize[1],
 				);
