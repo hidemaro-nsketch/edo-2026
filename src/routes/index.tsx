@@ -304,14 +304,14 @@ function ShuffleContent({
 	// 初回: セグメント＋設定からプランをコンパイルし、BuildSystem を生成
 	if (!systemRef.current) {
 		const plan = compilePlan(segments, config, 42);
-		systemRef.current = new BuildSystem(plan, config);
+		systemRef.current = new BuildSystem(plan, config, segments);
 	}
 
 	// GUI の Reset ボタン押下時: resetTrigger の変化を検知して再生成
 	if (resetTrigger !== lastResetRef.current) {
 		lastResetRef.current = resetTrigger;
 		const plan = compilePlan(segments, config, 42);
-		systemRef.current = new BuildSystem(plan, config);
+		systemRef.current = new BuildSystem(plan, config, segments);
 	}
 
 	const system = systemRef.current;
@@ -474,9 +474,7 @@ function Scene() {
 			// ③ 着物全体の背景画像を読み込み（反転版）
 			try {
 				const loader = new TextureLoader();
-				const bgTex = await loader.loadAsync(
-					`${KIMONO_BG_PATH}`,
-				);
+				const bgTex = await loader.loadAsync(`${KIMONO_BG_PATH}`);
 				if (disposed) return;
 				bgTex.colorSpace = SRGBColorSpace; // sRGB 色空間を明示（色味の正確性のため）
 				textures.push(bgTex);

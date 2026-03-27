@@ -9,8 +9,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { compilePlan } from "../layered-shuffle/compiled-plan";
-import { DEFAULT_CONFIG } from "../layered-shuffle/types";
+import {
+	buildBlackFillRenderInstancesForLayer,
+	buildSettledRenderInstancesForLayer,
+	getAtlasSelectionForLayer,
+} from "../layered-shuffle/render-snapshot";
 import type { CompiledPlan } from "../layered-shuffle/types";
+import { DEFAULT_CONFIG } from "../layered-shuffle/types";
 import { computeContainedSize, KIMONO_SIZE } from "../sakura/constants";
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
 
@@ -29,9 +34,7 @@ const SWAP_SIZE_RATIO_MAX = 4.0;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function loadManifest(
-	basePath: string,
-): Promise<SegmentManifest | null> {
+async function loadManifest(basePath: string): Promise<SegmentManifest | null> {
 	try {
 		const res = await fetch(`${basePath}/segments.manifest.json`);
 		if (!res.ok) return null;
@@ -131,7 +134,17 @@ function drawSegmentAtSlot(
 
 	const atlas = useOthers && othersAtlas ? othersAtlas : sakuraAtlas;
 	const [srcX, srcY, srcW, srcH] = seg.pixelRect;
-	ctx.drawImage(atlas, srcX, srcY, srcW, srcH, cx - dw / 2, cy - dh / 2, dw, dh);
+	ctx.drawImage(
+		atlas,
+		srcX,
+		srcY,
+		srcW,
+		srcH,
+		cx - dw / 2,
+		cy - dh / 2,
+		dw,
+		dh,
+	);
 }
 
 /**
@@ -171,24 +184,34 @@ function drawLayer(
 	const baseMapping = plan.mappingByLayer[0];
 	for (let slot = 0; slot < baseMapping.length; slot++) {
 		drawSegmentAtSlot(
-			ctx, baseMapping[slot], slot,
-			layoutSegments, mergedSegments, originalSegments,
-			sakuraAtlas, othersAtlas, false,
+			ctx,
+			baseMapping[slot],
+			slot,
+			layoutSegments,
+			mergedSegments,
+			originalSegments,
+			sakuraAtlas,
+			othersAtlas,
+			false,
 		);
 	}
 
 	// ── 3. For each layer 1..N: black fills then settled segments ──
 	for (let l = 1; l <= layer; l++) {
-		const useOthers = l >= contentStartLayer;
+		const useOthers = getAtlasSelectionForLayer(l, DEFAULT_CONFIG) > 0;
 
 		// 3a. Black fills — vacated slots, cover the old segment underneath
-		const vacated = plan.vacatedByLayer[l] ?? [];
-		for (const v of vacated) {
-			const [bfX, bfY] = worldToCanvas(v.position[0], v.position[1]);
+		const blackFills = buildBlackFillRenderInstancesForLayer(
+			plan,
+			DEFAULT_CONFIG,
+			l,
+		);
+		for (const fill of blackFills) {
+			const [bfX, bfY] = worldToCanvas(fill.x, fill.y);
 			const BF_SCALE = 1.15; // same as SegmentMeshes.tsx
 			const [bfW, bfH] = worldSizeToCanvas(
-				v.size[0] * BF_SCALE,
-				v.size[1] * BF_SCALE,
+				fill.w * BF_SCALE,
+				fill.h * BF_SCALE,
 			);
 			ctx.fillStyle = "#000";
 			ctx.fillRect(bfX - bfW / 2, bfY - bfH / 2, bfW, bfH);
@@ -200,17 +223,25 @@ function drawLayer(
 		}
 
 		// 3b. Settled segments — only swapped segments at their new positions
-		const mapping = plan.mappingByLayer[l];
-		for (const [slotA, slotB] of plan.swapsByLayer[l]) {
+		const settled = buildSettledRenderInstancesForLayer(
+			plan,
+			layoutSegments,
+			DEFAULT_CONFIG,
+			l,
+		);
+		for (const instance of settled) {
+			const slot = plan.mappingByLayer[l].indexOf(instance.segId);
+			if (slot < 0) continue;
 			drawSegmentAtSlot(
-				ctx, mapping[slotA], slotA,
-				layoutSegments, mergedSegments, originalSegments,
-				sakuraAtlas, othersAtlas, useOthers,
-			);
-			drawSegmentAtSlot(
-				ctx, mapping[slotB], slotB,
-				layoutSegments, mergedSegments, originalSegments,
-				sakuraAtlas, othersAtlas, useOthers,
+				ctx,
+				instance.segId,
+				slot,
+				layoutSegments,
+				mergedSegments,
+				originalSegments,
+				sakuraAtlas,
+				othersAtlas,
+				useOthers,
 			);
 		}
 	}
@@ -244,15 +275,9 @@ function drawLayer(
 			// Contained size boundary (magenta)
 			const segId = currentMapping[slot];
 			const useOthers = layer >= contentStartLayer;
-			const seg = useOthers
-				? mergedSegments[segId]
-				: originalSegments[segId];
-			const contentW = useOthers
-				? seg.trimmedSize[0]
-				: seg.bboxInSource[2];
-			const contentH = useOthers
-				? seg.trimmedSize[1]
-				: seg.bboxInSource[3];
+			const seg = useOthers ? mergedSegments[segId] : originalSegments[segId];
+			const contentW = useOthers ? seg.trimmedSize[0] : seg.bboxInSource[2];
+			const contentH = useOthers ? seg.trimmedSize[1] : seg.bboxInSource[3];
 			const [dw, dh] = computeContainedSize(contentW, contentH, sw, sh);
 			ctx.strokeStyle = "rgba(255, 0, 255, 0.8)";
 			ctx.lineWidth = 1;
@@ -264,11 +289,7 @@ function drawLayer(
 	const useOthers = layer >= contentStartLayer;
 	ctx.fillStyle = "white";
 	ctx.font = "bold 14px monospace";
-	ctx.fillText(
-		`Layer ${layer}${useOthers ? " (others)" : " (sakura)"}`,
-		8,
-		20,
-	);
+	ctx.fillText(`Layer ${layer}${useOthers ? " (others)" : " (sakura)"}`, 8, 20);
 
 	// Swap info
 	if (layer > 0) {

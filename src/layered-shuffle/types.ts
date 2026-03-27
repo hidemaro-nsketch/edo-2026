@@ -78,6 +78,32 @@ export type SegmentLifecycle = {
 	legs: SegmentLeg[];
 };
 
+/** GPU-ready data for one segment quad (position, size, atlas selection, wipe state) */
+export type SegmentRenderInstance = {
+	segId: number;
+	x: number;
+	y: number;
+	z: number;
+	w: number;
+	h: number;
+	useOthersAtlas: number;
+	wipeRole: number;
+	isBboxOutline: number;
+	swipeProgress: number;
+};
+
+/** GPU-ready data for a black silhouette at a vacated slot */
+export type BlackFillRenderInstance = {
+	segId: number;
+	x: number;
+	y: number;
+	z: number;
+	w: number;
+	h: number;
+	sourceLayer: number;
+	useOthersAtlas: number;
+};
+
 /** A slot vacated by a segment moving away during a swap */
 export type VacatedSlot = {
 	/** Slot index that was vacated */
