@@ -263,7 +263,8 @@ function writeInstances(
       const idx = segCount + i;
       dg.posXY.setXY(idx, bf.x, bf.y);
       dg.posZ.setX(idx, bf.z);
-      dg.size.setXY(idx, bf.w, bf.h);
+      const BF_SCALE = 1.15;
+      dg.size.setXY(idx, bf.w * BF_SCALE, bf.h * BF_SCALE);
 
       // Use the segment's atlas UVs for shape masking
       const seg = uvSegs[bf.segId];
