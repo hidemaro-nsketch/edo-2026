@@ -14,6 +14,12 @@
 export type ShuffleConfig = {
 	/** Maximum number of shuffle generations */
 	maxGenerations: number;
+	/** Number of bbox flash cycles before swipe (0 to disable) */
+	flashCount: number;
+	/** Duration of flash-on period in seconds */
+	flashOnDuration: number;
+	/** Duration of flash-off period in seconds */
+	flashOffDuration: number;
 	/** Duration of swipe animation per layer in seconds */
 	swipeDuration: number;
 	/** Random variation ratio for swipe duration per layer (0..1) */
@@ -30,6 +36,12 @@ export type ShuffleConfig = {
 	holdAfterComplete: number;
 	/** Minimum layer at which each category begins swapping (e.g. { sakura: 1, leaf: 4 }) */
 	categoryStartLayer: Record<string, number>;
+	/** Minimum layer at which each sourceImageId begins participating in swaps.
+	 *  Sources not listed default to 1 (always eligible). */
+	sourceImageStartLayer: Record<string, number>;
+	/** Minimum layer at which "others" atlas content is used for rendering.
+	 *  Layers below this threshold render with the original (layout) atlas. */
+	contentStartLayer: number;
 };
 
 /** A pair of slot indices to swap */
@@ -98,6 +110,7 @@ export type CompiledPlan = {
 
 /** Phase of the build state machine */
 export type BuildPhase =
+	| "flash" // bbox wireframe flash before swipe
 	| "swipe" // horizontal wipe transition for swapped slots
 	| "hold" // brief pause after swipe (commit happens inline at end)
 	| "complete" // all layers built
@@ -119,6 +132,9 @@ export type BuildState = {
 /** Default configuration values */
 export const DEFAULT_CONFIG: ShuffleConfig = {
 	maxGenerations: 10,
+	flashCount: 2,
+	flashOnDuration: 0.08,
+	flashOffDuration: 0.06,
 	swipeDuration: 1.5,
 	swipeDurationJitter: 0.75,
 	holdDuration: 1.0,
@@ -127,4 +143,9 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
 	collapseStagger: 0.08,
 	holdAfterComplete: 1.0,
 	categoryStartLayer: { sakura: 1, leaf: 4, flower: 7 },
+	sourceImageStartLayer: {
+		"花陽ひいなかた-2_s03_str0.600_seed45": 4,
+		"花鳥雛形-107_s01_str0.400_seed43": 4,
+	},
+	contentStartLayer: 5,
 };

@@ -81,6 +81,7 @@ function generateSwapPairs(
 	gen: number,
 	segments: SegmentInfo[],
 	categoryStartLayer: Record<string, number>,
+	sourceImageStartLayer: Record<string, number>,
 ): SwapPair[] {
 	const SWAPS_PER_CATEGORY = 1;
 	const categoryGroups = groupByCategory(segments);
@@ -92,10 +93,18 @@ function generateSwapPairs(
 		const catName = segments[slots[0]].categoryName;
 		const startLayer = categoryStartLayer[catName] ?? 1;
 		if (gen < startLayer) continue;
-		if (slots.length < 2) continue;
+
+		// Filter slots by sourceImageStartLayer: exclude segments whose
+		// sourceImageId hasn't started participating yet at this layer
+		const eligibleSlots = slots.filter((slot) => {
+			const srcId = segments[slot].sourceImageId;
+			const srcStart = sourceImageStartLayer[srcId] ?? 1;
+			return gen >= srcStart;
+		});
+		if (eligibleSlots.length < 2) continue;
 
 		// Shuffle slots for randomness
-		const shuffled = [...slots];
+		const shuffled = [...eligibleSlots];
 		for (let i = shuffled.length - 1; i > 0; i--) {
 			const j = Math.floor(Math.random() * (i + 1));
 			[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -138,7 +147,14 @@ export function compilePlan(
 	// Each layer gets category-aware random swaps (sakura↔sakura, leaf↔leaf, etc.)
 	const swapsByLayer: SwapPair[][] = [[]]; // layer 0 = base, no swaps
 	for (let layer = 1; layer <= maxGen; layer++) {
-		swapsByLayer.push(generateSwapPairs(layer, segments, config.categoryStartLayer));
+		swapsByLayer.push(
+			generateSwapPairs(
+				layer,
+				segments,
+				config.categoryStartLayer,
+				config.sourceImageStartLayer,
+			),
+		);
 	}
 
 	// ── Step 2: Build cumulative slot→segment mappings ──

@@ -85,6 +85,8 @@ varying float vIsBboxOutline;
 varying float vSwipeProgress;
 
 uniform sampler2D uAtlas;
+uniform sampler2D uAtlasOthers;
+uniform float uUseOthersAtlas;
 
 void main() {
   // Bbox outline mode: draw white wireframe border
@@ -114,7 +116,9 @@ void main() {
   if (vIsBlackFill > 0.5) {
     vec2 flippedUv = vec2(vUv.x, 1.0 - vUv.y);
     vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
-    float a = texture2D(uAtlas, atlasUv).a;
+    float a = uUseOthersAtlas > 0.5
+      ? texture2D(uAtlasOthers, atlasUv).a
+      : texture2D(uAtlas, atlasUv).a;
     // Sharpen edge alpha so the fill is solidly black (no translucent fringe)
     float solidA = step(0.01, a);
     gl_FragColor = vec4(0.0, 0.0, 0.0, solidA);
@@ -123,7 +127,9 @@ void main() {
 
   vec2 flippedUv = vec2(vUv.x, 1.0 - vUv.y);
   vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
-  vec4 color = texture2D(uAtlas, atlasUv);
+  vec4 color = uUseOthersAtlas > 0.5
+    ? texture2D(uAtlasOthers, atlasUv)
+    : texture2D(uAtlas, atlasUv);
 
   float mask = step(0.01, color.a);
   // 輝度ベースで黒/白を判定（smoothstepでアンチエイリアス）
@@ -135,12 +141,14 @@ void main() {
 
 // ─── Shared material ─────────────────────────────────────────────────────────
 
-function createMaterial(atlas: Texture): ShaderMaterial {
+function createMaterial(atlas: Texture, othersAtlas?: Texture): ShaderMaterial {
   return new ShaderMaterial({
     vertexShader,
     fragmentShader,
     uniforms: {
       uAtlas: { value: atlas },
+      uAtlasOthers: { value: othersAtlas ?? atlas },
+      uUseOthersAtlas: { value: 0.0 },
     },
     transparent: true,
     depthWrite: false,
@@ -202,13 +210,23 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
  * Segments come first, then black fills are appended after them.
  * Must be called every frame since instance data changes with animation.
  */
+type WriteOptions = {
+  blackFills?: BlackFillInstance[];
+  opacityOverride?: Map<number, number>;
+  /** When provided, UV data is read from this array instead of segments (for original atlas) */
+  uvSegments?: SegmentInfo[];
+};
+
 function writeInstances(
   dg: DynamicGeometry,
   instances: SegmentInstance[],
   segments: SegmentInfo[],
-  blackFills?: BlackFillInstance[],
-  opacityOverride?: Map<number, number>,
+  opts?: WriteOptions,
 ): void {
+  const blackFills = opts?.blackFills;
+  const opacityOverride = opts?.opacityOverride;
+  const uvSegs = opts?.uvSegments ?? segments;
+
   const segCount = Math.min(instances.length, dg.maxInstances);
   const bfCount = blackFills
     ? Math.min(blackFills.length, dg.maxInstances - segCount)
@@ -219,11 +237,11 @@ function writeInstances(
   // Write segment instances
   for (let i = 0; i < segCount; i++) {
     const inst = instances[i];
+    const seg = uvSegs[inst.segId];
+
     dg.posXY.setXY(i, inst.x, inst.y);
     dg.posZ.setX(i, inst.z);
     dg.size.setXY(i, inst.w, inst.h);
-
-    const seg = segments[inst.segId];
     const off = i * 4;
     dg.uvRect.array[off] = seg.uvRect[0];
     dg.uvRect.array[off + 1] = seg.uvRect[1];
@@ -247,8 +265,8 @@ function writeInstances(
       dg.posZ.setX(idx, bf.z);
       dg.size.setXY(idx, bf.w, bf.h);
 
-      // Use the original segment's atlas UVs for shape masking
-      const seg = segments[bf.segId];
+      // Use the segment's atlas UVs for shape masking
+      const seg = uvSegs[bf.segId];
       const off = idx * 4;
       dg.uvRect.array[off] = seg.uvRect[0];
       dg.uvRect.array[off + 1] = seg.uvRect[1];
@@ -388,7 +406,13 @@ function createLayerMeshPool(
 
 type SegmentMeshesProps = {
   segments: SegmentInfo[];
+  /** Original segments with layout atlas UVs (before others merge) */
+  originalSegments: SegmentInfo[];
   atlasTexture: Texture;
+  /** Atlas texture for "others" content (falls back to atlasTexture if null) */
+  othersAtlasTexture: Texture | null;
+  /** Layer threshold: layers below this use original atlas, layers >= use others */
+  contentStartLayer: number;
   buildSystem: BuildSystem;
   debugControls?: DebugControls;
 };
@@ -397,7 +421,10 @@ type SegmentMeshesProps = {
 
 export function SegmentMeshes({
   segments,
+  originalSegments,
   atlasTexture,
+  othersAtlasTexture,
+  contentStartLayer,
   buildSystem,
   debugControls,
 }: SegmentMeshesProps) {
@@ -410,15 +437,18 @@ export function SegmentMeshes({
   const maxPerLayer = segments.length * 2;
 
   const { baseGeo, baseInstances, activeGeo, material, settledPool } = useMemo(() => {
-    const { dg: bg, baseInstances: bi } = buildBaseGeometry(segments);
+    const { dg: bg, baseInstances: bi } = buildBaseGeometry(originalSegments);
     const ag = createDynamicGeometry(segments.length);
-    const mat = createMaterial(atlasTexture);
+    const mat = createMaterial(atlasTexture, othersAtlasTexture ?? undefined);
     const pool = createLayerMeshPool(maxPerLayer, mat, layerCount);
     return { baseGeo: bg, baseInstances: bi, activeGeo: ag, material: mat, settledPool: pool };
-  }, [segments, atlasTexture, layerCount, maxPerLayer]);
+  }, [segments, originalSegments, atlasTexture, othersAtlasTexture, layerCount, maxPerLayer]);
 
   const baseMeshRef = useRef<Mesh>(new Mesh(baseGeo.geo, material));
   const activeMeshRef = useRef<Mesh>(new Mesh(activeGeo.geo, material));
+
+  // Track which atlas each mesh should use (set per-frame, read in onBeforeRender)
+  const meshAtlasRef = useRef<Map<Mesh, number>>(new Map());
 
   useEffect(() => {
     baseMeshRef.current.geometry = baseGeo.geo;
@@ -428,6 +458,17 @@ export function SegmentMeshes({
     activeMeshRef.current.geometry = activeGeo.geo;
     activeMeshRef.current.material = material;
     // active renderOrder is updated per-frame
+
+    // onBeforeRender: toggle uUseOthersAtlas uniform per-mesh just before draw
+    const setAtlasUniform = (mesh: Mesh) => {
+      const useOthers = meshAtlasRef.current.get(mesh) ?? 0;
+      material.uniforms.uUseOthersAtlas.value = useOthers;
+    };
+    baseMeshRef.current.onBeforeRender = () => setAtlasUniform(baseMeshRef.current);
+    activeMeshRef.current.onBeforeRender = () => setAtlasUniform(activeMeshRef.current);
+    for (const mesh of settledPool.meshes) {
+      mesh.onBeforeRender = () => setAtlasUniform(mesh);
+    }
 
     return () => {
       baseGeo.geo.dispose();
@@ -468,6 +509,15 @@ export function SegmentMeshes({
     const currentLayer = buildSystem.getCurrentLayer();
     activeMeshRef.current.renderOrder = layerRenderOrder(currentLayer, "active");
 
+    // Helper: pick UV segments array based on layer vs contentStartLayer
+    const uvSegsForLayer = (layer: number) =>
+      layer >= contentStartLayer ? segments : originalSegments;
+
+    // Set atlas selection per mesh (read by onBeforeRender)
+    const atlasMap = meshAtlasRef.current;
+    atlasMap.set(baseMeshRef.current, 0); // base always uses original atlas
+    atlasMap.set(activeMeshRef.current, currentLayer >= contentStartLayer ? 1 : 0);
+
     // Gather all render data from BuildSystem
     const settledByLayer = buildSystem.getSettledByLayer();
     const activeBlackFills = buildSystem.getBlackFillInstances();       // current layer's swap → placed on prev layer
@@ -479,7 +529,9 @@ export function SegmentMeshes({
       camera,
       viewDirRef.current,
     );
-    writeInstances(activeGeo, activeInstances, segments);
+    writeInstances(activeGeo, activeInstances, segments, {
+      uvSegments: uvSegsForLayer(currentLayer),
+    });
 
     // Group active black fills by their sourceLayer (each fill targets the layer
     // where the departing segment is actually rendered, not necessarily currentLayer-1)
@@ -502,7 +554,10 @@ export function SegmentMeshes({
           ? [...layer0BlackFills, ...activeBf0]
           : activeBf0;
       }
-      writeInstances(baseGeo, baseInstances, segments, layer0BlackFills);
+      writeInstances(baseGeo, baseInstances, segments, {
+        blackFills: layer0BlackFills,
+        uvSegments: originalSegments,
+      });
     }
 
     // Write settled meshes: one per past layer, each with its own committed black fills.
@@ -521,7 +576,13 @@ export function SegmentMeshes({
           : activeBfForLayer;
       }
 
-      writeInstances(settledPool.geos[i], sorted, segments, layerBlackFills);
+      // Set atlas for this layer's mesh
+      atlasMap.set(settledPool.meshes[i], layerIdx >= contentStartLayer ? 1 : 0);
+
+      writeInstances(settledPool.geos[i], sorted, segments, {
+        blackFills: layerBlackFills,
+        uvSegments: uvSegsForLayer(layerIdx),
+      });
       settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");
     }
   });
