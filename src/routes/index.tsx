@@ -156,26 +156,26 @@ function useDebugGui(): DebugGuiResult {
 
 	// セグメントが次の位置へ移動する際のアニメーション設定
 	const animation = useControls("Animation", {
-		flashCount: { value: 2, min: 0, max: 6, step: 1 },
-		flashOnDuration: { value: 0.08, min: 0.01, max: 0.5, step: 0.01 },
-		flashOffDuration: { value: 0.06, min: 0.0, max: 0.5, step: 0.01 },
-		swipeDuration: { value: 1.5, min: 0.1, max: 8, step: 0.1 }, // 移動にかかる秒数
-		swipeDurationJitter: { value: 0.75, min: 0, max: 0.8, step: 0.01 }, // ランダムなばらつき
-		holdDuration: { value: 1.0, min: 0, max: 10, step: 0.1 }, // 到着後に静止する秒数
+		flashCount: { value: DEFAULT_CONFIG.flashCount, min: 0, max: 6, step: 1 },
+		flashOnDuration: { value: DEFAULT_CONFIG.flashOnDuration, min: 0.01, max: 0.5, step: 0.01 },
+		flashOffDuration: { value: DEFAULT_CONFIG.flashOffDuration, min: 0.0, max: 0.5, step: 0.01 },
+		swipeDuration: { value: DEFAULT_CONFIG.swipeDuration, min: 0.1, max: 8, step: 0.1 }, // 移動にかかる秒数
+		swipeDurationJitter: { value: DEFAULT_CONFIG.swipeDurationJitter, min: 0, max: 0.8, step: 0.01 }, // ランダムなばらつき
+		holdDuration: { value: DEFAULT_CONFIG.holdDuration, min: 0, max: 10, step: 0.1 }, // 到着後に静止する秒数
 	});
 
 	// レイヤー構成の設定
 	const layers = useControls("Layers", {
-		maxGenerations: { value: 10, min: 1, max: 20, step: 1 }, // シャッフルの世代数（レイヤー数）
-		layerSpacing: { value: 2.0, min: 0.1, max: 4, step: 0.1 }, // レイヤー間の Z 軸距離
-		contentStartLayer: { value: 5, min: 1, max: 20, step: 1 }, // othersアトラスを使い始めるレイヤー
+		maxGenerations: { value: DEFAULT_CONFIG.maxGenerations, min: 1, max: 20, step: 1 }, // シャッフルの世代数（レイヤー数）
+		layerSpacing: { value: DEFAULT_CONFIG.layerSpacing, min: 0.1, max: 4, step: 0.1 }, // レイヤー間の Z 軸距離
+		contentStartLayer: { value: DEFAULT_CONFIG.contentStartLayer, min: 1, max: 20, step: 1 }, // othersアトラスを使い始めるレイヤー
 	});
 
 	// コラプスフェーズ（全レイヤーが最終位置に収束）の設定
 	const collapse = useControls("Collapse", {
-		collapseDuration: { value: 0.1, min: 0.05, max: 3, step: 0.05 }, // 各セグメントの収束アニメ秒数
-		collapseStagger: { value: 0.08, min: 0, max: 2, step: 0.01 }, // セグメント間の開始時間差
-		holdAfterComplete: { value: 1.0, min: 0, max: 5, step: 0.1 }, // 完了後の静止秒数
+		collapseDuration: { value: DEFAULT_CONFIG.collapseDuration, min: 0.05, max: 3, step: 0.05 }, // 各セグメントの収束アニメ秒数
+		collapseStagger: { value: DEFAULT_CONFIG.collapseStagger, min: 0, max: 2, step: 0.01 }, // セグメント間の開始時間差
+		holdAfterComplete: { value: DEFAULT_CONFIG.holdAfterComplete, min: 0, max: 5, step: 0.1 }, // 完了後の静止秒数
 	});
 
 	// スワイプエフェクト設定（ノイズ境界線 + 非アクティブスロットの暗さ）
