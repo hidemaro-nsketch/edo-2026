@@ -53,6 +53,7 @@ attribute float aWipeRole;
 attribute float aIsBboxOutline;
 attribute float aSwipeProgress;
 attribute float aUseOthersAtlas;
+attribute float aDimFactor;
 
 varying vec2 vUv;
 varying vec4 vUvRect;
@@ -62,6 +63,7 @@ varying float vWipeRole;
 varying float vIsBboxOutline;
 varying float vSwipeProgress;
 varying float vUseOthersAtlas;
+varying float vDimFactor;
 
 void main() {
   vUv = uv;
@@ -72,6 +74,7 @@ void main() {
   vIsBboxOutline = aIsBboxOutline;
   vSwipeProgress = aSwipeProgress;
   vUseOthersAtlas = aUseOthersAtlas;
+  vDimFactor = aDimFactor;
 
   vec3 scaled = position * vec3(aSize, 1.0);
   vec3 worldPos = scaled + vec3(aPosition, aPositionZ);
@@ -91,9 +94,44 @@ varying float vWipeRole;
 varying float vIsBboxOutline;
 varying float vSwipeProgress;
 varying float vUseOthersAtlas;
+varying float vDimFactor;
 
 uniform sampler2D uAtlas;
 uniform sampler2D uAtlasOthers;
+uniform float uTime;
+uniform float uNoiseFreq;
+uniform float uNoiseAmp;
+uniform float uNoiseSpeed;
+
+// ── Simplex 2D noise (Ashima Arts) ──────────────────────────────────────────
+vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
+
+float snoise(vec2 v) {
+  const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                     -0.577350269189626, 0.024390243902439);
+  vec2 i  = floor(v + dot(v, C.yy));
+  vec2 x0 = v - i + dot(i, C.xx);
+  vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+  vec4 x12 = x0.xyxy + C.xxzz;
+  x12.xy -= i1;
+  i = mod289(i);
+  vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+  vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+  m = m * m;
+  m = m * m;
+  vec3 x = 2.0 * fract(p * C.www) - 1.0;
+  vec3 h = abs(x) - 0.5;
+  vec3 ox = floor(x + 0.5);
+  vec3 a0 = x - ox;
+  m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+  vec3 g;
+  g.x = a0.x * x0.x + h.x * x0.y;
+  g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+  return 130.0 * dot(m, g);
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 void main() {
   // Bbox outline mode: draw white wireframe border
@@ -107,16 +145,19 @@ void main() {
     return;
   }
 
-  // Swipe clipping: use local quad UV.x (0..1)
+  // Swipe clipping with noisy edge
   if (vWipeRole > 0.5) {
     float x = vUv.x;
     float p = vSwipeProgress;
+    // Add noise distortion to the clip boundary
+    float noise = snoise(vec2(vUv.y * uNoiseFreq, uTime * uNoiseSpeed));
+    float threshold = p + noise * uNoiseAmp;
     if (vWipeRole < 1.5) {
       // Old segment: keep right portion, discard left as wipe progresses
-      if (x < p) discard;
+      if (x < threshold) discard;
     } else {
       // New segment: keep left portion, discard right
-      if (x > p) discard;
+      if (x > threshold) discard;
     }
   }
 
@@ -142,6 +183,8 @@ void main() {
   // 輝度ベースで黒/白を判定（smoothstepでアンチエイリアス）
   float lum = dot(color.rgb, vec3(0.299, 0.587, 0.114));
   vec3 rgb = vec3(smoothstep(0.02, 0.25, lum));
+  // Apply dim factor for non-active slots during swipe
+  rgb *= vDimFactor;
   gl_FragColor = vec4(rgb, mask * vOpacity);
 }
 `;
@@ -155,6 +198,10 @@ function createMaterial(atlas: Texture, othersAtlas?: Texture): ShaderMaterial {
 		uniforms: {
 			uAtlas: { value: atlas },
 			uAtlasOthers: { value: othersAtlas ?? atlas },
+			uTime: { value: 0 },
+			uNoiseFreq: { value: 15.0 },
+			uNoiseAmp: { value: 0.08 },
+			uNoiseSpeed: { value: 8.0 },
 		},
 		transparent: true,
 		depthWrite: false,
@@ -178,6 +225,7 @@ type DynamicGeometry = {
 	isBboxOutline: InstancedBufferAttribute;
 	swipeProgress: InstancedBufferAttribute;
 	useOthersAtlas: InstancedBufferAttribute;
+	dimFactor: InstancedBufferAttribute;
 	maxInstances: number;
 };
 
@@ -225,6 +273,10 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
 		new Float32Array(maxInstances),
 		1,
 	);
+	const dimFactor = new InstancedBufferAttribute(
+		new Float32Array(maxInstances).fill(1.0),
+		1,
+	);
 
 	geo.setAttribute("aPosition", posXY);
 	geo.setAttribute("aPositionZ", posZ);
@@ -236,6 +288,7 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
 	geo.setAttribute("aIsBboxOutline", isBboxOutline);
 	geo.setAttribute("aSwipeProgress", swipeProgress);
 	geo.setAttribute("aUseOthersAtlas", useOthersAtlas);
+	geo.setAttribute("aDimFactor", dimFactor);
 	geo.instanceCount = 0;
 
 	return {
@@ -250,6 +303,7 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
 		isBboxOutline,
 		swipeProgress,
 		useOthersAtlas,
+		dimFactor,
 		maxInstances,
 	};
 }
@@ -262,6 +316,7 @@ function createDynamicGeometry(maxInstances: number): DynamicGeometry {
 type WriteOptions = {
 	blackFills?: BlackFillRenderInstance[];
 	opacityOverride?: Map<number, number>;
+	dimFactor?: number;
 };
 
 function writeInstances(
@@ -272,6 +327,7 @@ function writeInstances(
 ): void {
 	const blackFills = opts?.blackFills;
 	const opacityOverride = opts?.opacityOverride;
+	const dim = opts?.dimFactor ?? 1.0;
 
 	const segCount = Math.min(instances.length, dg.maxInstances);
 	const bfCount = blackFills
@@ -301,6 +357,7 @@ function writeInstances(
 		dg.isBboxOutline.setX(i, inst.isBboxOutline);
 		dg.swipeProgress.setX(i, inst.swipeProgress);
 		dg.useOthersAtlas.setX(i, inst.useOthersAtlas);
+		dg.dimFactor.setX(i, dim);
 	}
 
 	// Write black fill instances after segment instances
@@ -327,6 +384,7 @@ function writeInstances(
 			dg.isBboxOutline.setX(idx, 0);
 			dg.swipeProgress.setX(idx, 0);
 			dg.useOthersAtlas.setX(idx, bf.useOthersAtlas);
+			dg.dimFactor.setX(idx, dim);
 		}
 	}
 
@@ -340,6 +398,7 @@ function writeInstances(
 	dg.isBboxOutline.needsUpdate = true;
 	dg.swipeProgress.needsUpdate = true;
 	dg.useOthersAtlas.needsUpdate = true;
+	dg.dimFactor.needsUpdate = true;
 }
 
 /** Reusable sort buffer to avoid per-frame allocation */
@@ -441,6 +500,14 @@ function createLayerMeshPool(
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
+/** Swipe effect parameters (noise + dimming) exposed to Leva GUI */
+export type SwipeEffectParams = {
+	noiseFreq: number;
+	noiseAmp: number;
+	noiseSpeed: number;
+	dimFactor: number;
+};
+
 type SegmentMeshesProps = {
 	segments: SegmentInfo[];
 	/** Original segments with layout atlas UVs (before others merge) */
@@ -452,6 +519,7 @@ type SegmentMeshesProps = {
 	contentStartLayer: number;
 	buildSystem: BuildSystem;
 	debugControls?: DebugControls;
+	swipeEffect?: SwipeEffectParams;
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -463,9 +531,11 @@ export function SegmentMeshes({
 	othersAtlasTexture,
 	buildSystem,
 	debugControls,
+	swipeEffect,
 }: SegmentMeshesProps) {
 	const { camera } = useThree();
 	const viewDirRef = useRef(new Vector3());
+	const currentDimRef = useRef(1.0);
 	const contentStartLayer = buildSystem.config.contentStartLayer;
 
 	const layerCount = buildSystem.config.maxGenerations;
@@ -533,6 +603,14 @@ export function SegmentMeshes({
 			}
 		}
 
+		// Update shader uniforms: time + noise parameters
+		material.uniforms.uTime.value += delta;
+		if (swipeEffect) {
+			material.uniforms.uNoiseFreq.value = swipeEffect.noiseFreq;
+			material.uniforms.uNoiseAmp.value = swipeEffect.noiseAmp;
+			material.uniforms.uNoiseSpeed.value = swipeEffect.noiseSpeed;
+		}
+
 		// フェーズ情報を Leva Phase Monitor にリアルタイム反映
 		if (debugControls) {
 			const label = buildSystem.getDebugLabel();
@@ -548,6 +626,13 @@ export function SegmentMeshes({
 			currentLayer,
 			"active",
 		);
+
+		// Determine dim factor: during swipe/flash phases, non-active meshes are dimmed
+		const phase = buildSystem.state.phase;
+		const dimTarget = phase === "swipe" ? (swipeEffect?.dimFactor ?? 0.3) : 1.0;
+		const DIM_FADE_SPEED = 8.0; // ~125ms to reach target
+		currentDimRef.current += (dimTarget - currentDimRef.current) * Math.min(1, delta * DIM_FADE_SPEED);
+		const dimValue = currentDimRef.current;
 
 		// Gather all render data from BuildSystem
 		const settledByLayer = buildSystem.getSettledByLayer();
@@ -589,6 +674,7 @@ export function SegmentMeshes({
 			}
 			writeInstances(baseGeo, baseInstances, originalSegments, {
 				blackFills: layer0BlackFills,
+				dimFactor: dimValue,
 			});
 		}
 
@@ -618,6 +704,7 @@ export function SegmentMeshes({
 				layerIdx >= contentStartLayer ? segments : originalSegments,
 				{
 					blackFills: layerBlackFills,
+					dimFactor: dimValue,
 				},
 			);
 			settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");

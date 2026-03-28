@@ -20,13 +20,17 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
 import { button, Leva, useControls } from "leva"; // Leva: ブラウザ上のデバッグ GUI ライブラリ
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system"; // シャッフルアニメーションの状態管理エンジン
 import { compilePlan } from "../layered-shuffle/compiled-plan"; // セグメント＋設定 → 実行プランへ変換
 import { DEFAULT_CONFIG, type ShuffleConfig } from "../layered-shuffle/types";
 import { CameraRig, Y_CENTER_OFFSET } from "../render/CameraRig"; // レイヤー追従カメラ
 import { ConnectionLines } from "../render/ConnectionLines"; // セグメント間の接続線描画
-import { SegmentMeshes } from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
+import {
+	SegmentMeshes,
+	type SwipeEffectParams,
+} from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
 import { KIMONO_SIZE } from "../sakura/constants";
 import { loadAtlasTextures } from "../sakura/segment-manager"; // アトラス画像の読み込み・テクスチャ化
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
@@ -122,6 +126,7 @@ type DebugGuiResult = ShuffleConfig & {
 	bgOpacity: number;
 	resetTrigger: number;
 	debugControls: DebugControls;
+	swipeEffect: SwipeEffectParams;
 };
 
 /**
@@ -171,6 +176,14 @@ function useDebugGui(): DebugGuiResult {
 		collapseDuration: { value: 0.1, min: 0.05, max: 3, step: 0.05 }, // 各セグメントの収束アニメ秒数
 		collapseStagger: { value: 0.08, min: 0, max: 2, step: 0.01 }, // セグメント間の開始時間差
 		holdAfterComplete: { value: 1.0, min: 0, max: 5, step: 0.1 }, // 完了後の静止秒数
+	});
+
+	// スワイプエフェクト設定（ノイズ境界線 + 非アクティブスロットの暗さ）
+	const swipeEffectGui = useControls("Swipe Effect", {
+		noiseFreq: { value: 15.0, min: 1, max: 50, step: 0.5 },
+		noiseAmp: { value: 0.08, min: 0, max: 0.3, step: 0.005 },
+		noiseSpeed: { value: 8.0, min: 0, max: 20, step: 0.5 },
+		dimFactor: { value: 0.3, min: 0, max: 1, step: 0.05 },
 	});
 
 	// ── Playback: 速度倍率スライダー ──
@@ -234,6 +247,7 @@ function useDebugGui(): DebugGuiResult {
 		contentStartLayer: layers.contentStartLayer,
 		resetTrigger,
 		debugControls,
+		swipeEffect: swipeEffectGui,
 	};
 }
 
@@ -247,16 +261,27 @@ function useDebugGui(): DebugGuiResult {
 function KimonoBackground({
 	texture,
 	opacity,
+	bgDimRef,
 }: {
 	texture: Texture | null;
 	opacity: number;
+	bgDimRef: React.RefObject<number>;
 }) {
+	const matRef = useRef<THREE.MeshBasicMaterial>(null);
+
+	useFrame(() => {
+		if (matRef.current) {
+			matRef.current.opacity = opacity * bgDimRef.current;
+		}
+	});
+
 	if (!texture) return null;
 
 	return (
 		<mesh position={[0, 0, -0.1]} renderOrder={-100}>
 			<planeGeometry args={[KIMONO_SIZE, KIMONO_SIZE]} />
 			<meshBasicMaterial
+				ref={matRef}
 				map={texture}
 				transparent
 				opacity={opacity}
@@ -277,6 +302,8 @@ type ShuffleContentProps = {
 	config: ShuffleConfig;
 	resetTrigger: number;
 	debugControls: DebugControls;
+	swipeEffect: SwipeEffectParams;
+	bgDimRef: React.MutableRefObject<number>;
 };
 
 /**
@@ -298,6 +325,8 @@ function ShuffleContent({
 	config,
 	resetTrigger,
 	debugControls,
+	swipeEffect,
+	bgDimRef,
 }: ShuffleContentProps) {
 	const systemRef = useRef<BuildSystem | null>(null);
 	const lastResetRef = useRef(0);
@@ -324,6 +353,14 @@ function ShuffleContent({
 
 	const system = systemRef.current;
 
+	// Update background dim ref per-frame based on swipe phase (smooth fade)
+	useFrame((_, delta) => {
+		const phase = system.state.phase;
+		const dimTarget = phase === "swipe" ? swipeEffect.dimFactor : 1.0;
+		const DIM_FADE_SPEED = 8.0;
+		bgDimRef.current += (dimTarget - bgDimRef.current) * Math.min(1, delta * DIM_FADE_SPEED);
+	});
+
 	return (
 		<>
 			<CameraAndLifecycle
@@ -339,6 +376,7 @@ function ShuffleContent({
 				contentStartLayer={config.contentStartLayer}
 				buildSystem={system}
 				debugControls={debugControls}
+				swipeEffect={swipeEffect}
 			/>
 			<ConnectionLines buildSystem={system} />
 		</>
@@ -546,12 +584,15 @@ function Scene() {
 		],
 	);
 
+	// Background dim factor: updated per-frame by ShuffleContent
+	const bgDimRef = useRef(1.0);
+
 	// セグメントがまだロードされていなければ何も描画しない
 	if (segments.length === 0) return null;
 
 	return (
 		<>
-			<KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} />
+			<KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} bgDimRef={bgDimRef} />
 			{atlasTexture && (
 				<ShuffleContent
 					segments={segments}
@@ -561,6 +602,8 @@ function Scene() {
 					config={config}
 					resetTrigger={gui.resetTrigger}
 					debugControls={gui.debugControls}
+					swipeEffect={gui.swipeEffect}
+					bgDimRef={bgDimRef}
 				/>
 			)}
 		</>
