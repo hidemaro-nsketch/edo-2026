@@ -44,7 +44,7 @@ export const Route = createFileRoute("/")({ component: App });
 const SAKURA_BASE_PATH = "/sakura";
 /** "others" フォルダ: 別画像ソースのアトラス（レイアウトは sakura のまま、描画内容だけ差し替え） */
 const OTHERS_BASE_PATH = "/sakuraothers";
-const KIMONO_BG_PATH = "/kimono_bg_inv.jpg"; // 着物全体の背景画像（反転版）
+const KIMONO_BG_PATH = "/sakura/kimono_bg_inv.jpg"; // 着物全体の背景画像（反転版）
 const INITIAL_PLAN_SEED = 42;
 
 // ─── Manifest loader ────────────────────────────────────────────────────────
