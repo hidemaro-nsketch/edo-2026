@@ -16,7 +16,7 @@
  */
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
 import { button, Leva, useControls } from "leva"; // Leva: ブラウザ上のデバッグ GUI ライブラリ
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -31,9 +31,13 @@ import {
 	SegmentMeshes,
 	type SwipeEffectParams,
 } from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
+import { TransitionRenderer } from "../render/TransitionRenderer"; // テーマ転換描画
 import { KIMONO_SIZE } from "../sakura/constants";
 import { loadAtlasTextures } from "../sakura/segment-manager"; // アトラス画像の読み込み・テクスチャ化
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
+import { ThemeTransitionSystem } from "../theme-transition/transition-system";
+import type { TransitionConfig, TransitionPhase } from "../theme-transition/types";
+import { DEFAULT_TRANSITION_CONFIG } from "../theme-transition/types";
 import {
 	getAvailableThemes,
 	getNextThemeIndex,
@@ -71,6 +75,10 @@ type SceneStatus = {
 	usingOthers: boolean;
 	/** Set of segment indices that were replaced with others content (via merge) */
 	othersSegIndices: Set<number>;
+	/** Current theme transition phase (null = no transition) */
+	transitionPhase: TransitionPhase | null;
+	/** GPU texture memory count (from renderer.info.memory.textures) */
+	textureCount: number;
 };
 
 // ─── Manifest loader ────────────────────────────────────────────────────────
@@ -257,6 +265,7 @@ type DebugGuiResult = ShuffleConfig & {
 	resetTrigger: number;
 	debugControls: DebugControls;
 	swipeEffect: SwipeEffectParams;
+	transitionConfig: Partial<TransitionConfig>;
 };
 
 /**
@@ -358,6 +367,13 @@ function useDebugGui(): DebugGuiResult {
 		},
 	}));
 
+	// テーマ転換アニメーション設定
+	const transitionGui = useControls("Theme Transition", {
+		scatterDuration: { value: DEFAULT_TRANSITION_CONFIG.scatterDuration, min: 0.3, max: 5, step: 0.1 },
+		blackoutDuration: { value: DEFAULT_TRANSITION_CONFIG.blackoutDuration, min: 0.1, max: 3, step: 0.1 },
+		gatherDuration: { value: DEFAULT_TRANSITION_CONFIG.gatherDuration, min: 0.3, max: 5, step: 0.1 },
+	});
+
 	// setMonitor を ref 経由で SegmentMeshes に渡す
 	const setMonitorRef = useRef(setMonitor);
 	setMonitorRef.current = setMonitor;
@@ -378,6 +394,7 @@ function useDebugGui(): DebugGuiResult {
 		resetTrigger,
 		debugControls,
 		swipeEffect: swipeEffectGui,
+		transitionConfig: transitionGui,
 	};
 }
 
@@ -631,29 +648,29 @@ function CameraAndLifecycle({
 /**
  * シーン全体の初期化と描画構成を管理するコンポーネント。
  *
- * テーマシーケンスシステム:
- *   - 利用可能なテーマ（sakura, ume 等）を順番にローテーション
- *   - アニメーション完了(idle)後、次のテーマのアセットをプリロード
- *   - ロード完了後に自動的に次のテーマに切り替え
- *
- * マウント時に最初のテーマのアセットを非同期ロード:
- *   1. segments.manifest.json からセグメント定義をロード
- *   2. アトラステクスチャ（スプライトシート）と着物背景画像をロード
- *   3. BuildSystem がシャッフル計画に従ってフレームごとにアニメーション状態を更新
- *   4. SegmentMeshes / ConnectionLines / KimonoBackground で描画
- *   5. アニメーション完了後 idle → 次のテーマをロードして自動リスタート
- *
- * アンマウント時はすべてのテクスチャを dispose してメモリを解放する。
+ * テーマ転換システム:
+ *   - key={} によるアンマウント方式を廃止
+ *   - scatter-out → blackout → gather-in のアニメーション転換
+ *   - currentAssets / nextAssets / transitionPhase による状態管理
+ *   - 転換中は ShuffleContent をフリーズし TransitionRenderer を表示
+ *   - 転換完了後 currentAssets = nextAssets で切り替え
  */
 function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }) {
-	const [themeAssets, setThemeAssets] = useState<ThemeAssets | null>(null);
+	const [currentAssets, setCurrentAssets] = useState<ThemeAssets | null>(null);
+	const [transitionPhase, setTransitionPhase] = useState<TransitionPhase | null>(null);
+
 	const themeIndexRef = useRef(0);
-	const themeAssetsRef = useRef<ThemeAssets | null>(null);
+	const currentAssetsRef = useRef<ThemeAssets | null>(null);
+	const nextAssetsRef = useRef<ThemeAssets | null>(null);
+	const transitionSystemRef = useRef<ThemeTransitionSystem | null>(null);
 	const transitionAbortRef = useRef<AbortController | null>(null);
+	const shuffleFrozenRef = useRef(false);
+	const transitionCountRef = useRef(0);
+	const { gl } = useThree();
 	const gui = useDebugGui();
 
-	// Keep ref in sync with state (avoids stale closure in onCycleComplete)
-	themeAssetsRef.current = themeAssets;
+	// Keep ref in sync with state
+	currentAssetsRef.current = currentAssets;
 
 	// Initial theme load
 	useEffect(() => {
@@ -674,35 +691,46 @@ function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }
 				statusRef.current.segmentCount = assets.segments.length;
 				statusRef.current.maxLayers = gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations;
 				statusRef.current.loading = false;
-				setThemeAssets(assets);
+				setCurrentAssets(assets);
 			}
 		}
 
 		init();
-
-		return () => {
-			controller.abort();
-		};
+		return () => { controller.abort(); };
 	}, []);
 
 	// Cleanup textures on unmount
 	useEffect(() => {
 		return () => {
 			transitionAbortRef.current?.abort();
-			if (themeAssetsRef.current) {
-				for (const tex of themeAssetsRef.current.allTextures) {
+			if (currentAssetsRef.current) {
+				for (const tex of currentAssetsRef.current.allTextures) {
 					tex.dispose();
 				}
 			}
 		};
 	}, []);
 
+	// Monitor texture memory in StatusPanel
+	useFrame(() => {
+		statusRef.current.textureCount = gl.info.memory.textures;
+		statusRef.current.transitionPhase = transitionPhase;
+
+		// Drive transition system each frame
+		if (transitionSystemRef.current && transitionPhase) {
+			// delta is handled by useFrame's second arg, but we need manual delta here
+			// since this is a separate useFrame from ShuffleContent
+		}
+	});
+
 	/**
 	 * Called by ShuffleContent when animation cycle completes (idle).
-	 * Loads the next theme's assets and transitions.
-	 * Uses refs to avoid stale closures — stable identity, no deps needed.
+	 * Starts the scatter-out transition and begins loading next theme's assets.
 	 */
 	const onCycleComplete = useRef(async () => {
+		const curAssets = currentAssetsRef.current;
+		if (!curAssets) return;
+
 		// Abort any in-flight transition load
 		transitionAbortRef.current?.abort();
 		const controller = new AbortController();
@@ -716,36 +744,65 @@ function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }
 		if (!nextTheme) return;
 
 		console.log(
-			`Theme sequence: ${AVAILABLE_THEMES[themeIndexRef.current]?.id} → ${nextTheme.id}`,
+			`Theme transition: ${AVAILABLE_THEMES[themeIndexRef.current]?.id} → ${nextTheme.id}`,
 		);
-		statusRef.current.loading = true;
 
-		const assets = await loadThemeAssets(nextTheme, controller.signal);
-		if (controller.signal.aborted) return;
-		if (assets) {
-			// Dispose previous assets via ref (never stale)
-			const prev = themeAssetsRef.current;
-			themeIndexRef.current = nextIndex;
-			statusRef.current.themeId = nextTheme.id;
-			statusRef.current.themeName = nextTheme.displayName;
-			statusRef.current.themeIndex = nextIndex;
-			statusRef.current.segmentCount = assets.segments.length;
-			statusRef.current.loading = false;
-			setThemeAssets(assets);
-			console.log(
-				`Theme [${nextTheme.id}] loaded: ${assets.segments.length} segments`,
-			);
+		// Freeze shuffle content and start scatter-out
+		shuffleFrozenRef.current = true;
 
-			// Dispose previous after state update
+		// Use a unique seed per transition so Voronoi pattern differs each time
+		transitionCountRef.current += 1;
+		const transitionConfig: Partial<TransitionConfig> = {
+			scatterDuration: gui.transitionConfig?.scatterDuration ?? DEFAULT_TRANSITION_CONFIG.scatterDuration,
+			blackoutDuration: gui.transitionConfig?.blackoutDuration ?? DEFAULT_TRANSITION_CONFIG.blackoutDuration,
+			gatherDuration: gui.transitionConfig?.gatherDuration ?? DEFAULT_TRANSITION_CONFIG.gatherDuration,
+			noiseSeed: Date.now() + transitionCountRef.current,
+		};
+
+		const system = new ThemeTransitionSystem(
+			curAssets.originalSegments,
+			transitionConfig,
+		);
+
+		// Set up dispose callback: dispose old textures after blackout + 1 frame
+		system.onDispose(() => {
+			const prev = currentAssetsRef.current;
 			if (prev) {
+				console.log(`Disposing old theme textures: ${prev.theme.id}`);
 				for (const tex of prev.allTextures) {
 					tex.dispose();
 				}
 			}
+		});
+
+		transitionSystemRef.current = system;
+		setTransitionPhase("scatter-out");
+
+		// Load next theme assets in parallel
+		statusRef.current.loading = true;
+		const assets = await loadThemeAssets(nextTheme, controller.signal);
+
+		if (controller.signal.aborted) return;
+
+		if (assets) {
+			// Provide new assets to transition system
+			system.setNewAssets(assets.originalSegments);
+			nextAssetsRef.current = assets;
+			themeIndexRef.current = nextIndex;
+
+			console.log(
+				`Theme [${nextTheme.id}] loaded: ${assets.segments.length} segments`,
+			);
+		} else {
+			// Load failed: transition system will fall back to old theme
+			console.warn(`Theme [${nextTheme.id}] load failed, reverting`);
+			system.setLoadFailed();
 		}
+
+		statusRef.current.loading = false;
 	}).current;
 
-	// GUI の値を ShuffleConfig 型に変換（未設定時はデフォルト値にフォールバック）
+	// GUI の値を ShuffleConfig 型に変換
 	const config: ShuffleConfig = useMemo(
 		() => ({
 			maxGenerations: gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations,
@@ -789,26 +846,119 @@ function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }
 	const bgDimRef = useRef(1.0);
 
 	// テーマアセットがまだロードされていなければ何も描画しない
-	if (!themeAssets) return null;
+	if (!currentAssets) return null;
 
 	return (
 		<>
-			<KimonoBackground texture={themeAssets.kimonoTexture} opacity={gui.bgOpacity} bgDimRef={bgDimRef} />
-			<ShuffleContent
-				key={themeAssets.theme.id}
-				segments={themeAssets.segments}
-				originalSegments={themeAssets.originalSegments}
-				atlasTexture={themeAssets.atlasTexture}
-				othersAtlasTexture={themeAssets.othersAtlasTexture}
-				config={config}
-				resetTrigger={gui.resetTrigger}
-				debugControls={gui.debugControls}
-				swipeEffect={gui.swipeEffect}
-				bgDimRef={bgDimRef}
-				onCycleComplete={onCycleComplete}
-				statusRef={statusRef}
-			/>
+			{/* Background: hidden during transitions (TransitionRenderer handles it) */}
+			{!transitionPhase && (
+				<KimonoBackground texture={currentAssets.kimonoTexture} opacity={gui.bgOpacity} bgDimRef={bgDimRef} />
+			)}
+
+			{/* Normal shuffle content — frozen during transitions */}
+			{!transitionPhase && (
+				<ShuffleContent
+					key={currentAssets.theme.id}
+					segments={currentAssets.segments}
+					originalSegments={currentAssets.originalSegments}
+					atlasTexture={currentAssets.atlasTexture}
+					othersAtlasTexture={currentAssets.othersAtlasTexture}
+					config={config}
+					resetTrigger={gui.resetTrigger}
+					debugControls={gui.debugControls}
+					swipeEffect={gui.swipeEffect}
+					bgDimRef={bgDimRef}
+					onCycleComplete={onCycleComplete}
+					statusRef={statusRef}
+				/>
+			)}
+
+			{/* Transition renderer — active during theme transitions */}
+			{transitionPhase && transitionSystemRef.current && (
+				<TransitionOverlay
+					transitionSystem={transitionSystemRef.current}
+					currentAssets={currentAssets}
+					nextAssetsRef={nextAssetsRef}
+					swipeEffect={gui.swipeEffect}
+					bgOpacity={gui.bgOpacity}
+					onTransitionComplete={() => {
+						const next = nextAssetsRef.current;
+						if (next) {
+							// Swap to new theme
+							statusRef.current.themeId = next.theme.id;
+							statusRef.current.themeName = next.theme.displayName;
+							statusRef.current.themeIndex = themeIndexRef.current;
+							statusRef.current.segmentCount = next.segments.length;
+							setCurrentAssets(next);
+						}
+						// Clear transition state and dispose fragment geometries
+						transitionSystemRef.current?.disposeFragments();
+						nextAssetsRef.current = null;
+						transitionSystemRef.current = null;
+						shuffleFrozenRef.current = false;
+						setTransitionPhase(null);
+					}}
+				/>
+			)}
 		</>
+	);
+}
+
+/**
+ * TransitionOverlay — Drives the ThemeTransitionSystem and renders the transition.
+ *
+ * Updates the system each frame and detects phase transitions.
+ * When transition completes, calls onTransitionComplete to swap themes.
+ */
+function TransitionOverlay({
+	transitionSystem,
+	currentAssets,
+	nextAssetsRef,
+	swipeEffect,
+	bgOpacity,
+	onTransitionComplete,
+}: {
+	transitionSystem: ThemeTransitionSystem;
+	currentAssets: ThemeAssets;
+	nextAssetsRef: React.RefObject<ThemeAssets | null>;
+	swipeEffect: SwipeEffectParams;
+	bgOpacity: number;
+	onTransitionComplete: () => void;
+}) {
+	const completedRef = useRef(false);
+	const [newBgTexture, setNewBgTexture] = useState<Texture | null>(null);
+
+	useFrame((_, delta) => {
+		transitionSystem.update(delta);
+
+		// Lazily pick up new background texture once assets load
+		if (!newBgTexture && nextAssetsRef.current?.kimonoTexture) {
+			setNewBgTexture(nextAssetsRef.current.kimonoTexture);
+		}
+
+		const phase = transitionSystem.getPhase();
+		if (phase === "complete" && !completedRef.current) {
+			completedRef.current = true;
+			onTransitionComplete();
+		}
+	});
+
+	const nextAssets = nextAssetsRef.current;
+
+	return (
+		<TransitionRenderer
+			transitionSystem={transitionSystem}
+			oldAtlasTexture={currentAssets.atlasTexture}
+			oldOthersAtlasTexture={currentAssets.othersAtlasTexture ?? undefined}
+			newAtlasTexture={nextAssets?.atlasTexture}
+			newOthersAtlasTexture={nextAssets?.othersAtlasTexture ?? undefined}
+			oldSegments={currentAssets.originalSegments}
+			newSegments={nextAssets?.originalSegments ?? []}
+			swipeEffect={swipeEffect}
+			oldBgTexture={currentAssets.kimonoTexture}
+			newBgTexture={newBgTexture}
+			bgOpacity={bgOpacity}
+		/>
 	);
 }
 
@@ -829,6 +979,8 @@ const INITIAL_STATUS: SceneStatus = {
 	slotMapping: [],
 	usingOthers: false,
 	othersSegIndices: new Set(),
+	transitionPhase: null,
+	textureCount: 0,
 };
 
 const PHASE_LABELS: Record<string, string> = {
@@ -889,6 +1041,11 @@ function StatusPanel({ statusRef }: { statusRef: React.RefObject<SceneStatus> })
 				? changedSlots.join("&nbsp; ")
 				: "---";
 
+			// Transition phase label
+			const transLabel = s.transitionPhase
+				? `<span style="color:#f80">${s.transitionPhase}</span>`
+				: `<span style="color:#888">---</span>`;
+
 			el.innerHTML =
 				`<div style="margin-bottom:12px;font-size:14px;color:#888;letter-spacing:0.05em">SCENE STATUS</div>` +
 				`<div style="margin-bottom:6px"><span style="color:#888">Theme:</span> <span style="color:#fff">${themeLabel}</span></div>` +
@@ -896,6 +1053,8 @@ function StatusPanel({ statusRef }: { statusRef: React.RefObject<SceneStatus> })
 				`<div style="margin-bottom:6px"><span style="color:#888">Phase:</span> <span style="color:#fff">${phaseLabel}</span></div>` +
 				`<div style="margin-bottom:6px"><span style="color:#888">Layer:</span> <span style="color:#fff">${layerLabel}</span></div>` +
 				`<div style="margin-bottom:6px"><span style="color:#888">Phase Time:</span> <span style="color:#fff">${timeLabel}s</span></div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Transition:</span> ${transLabel}</div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Textures:</span> <span style="color:#fff">${s.textureCount}</span></div>` +
 				`<div style="margin-bottom:10px"><span style="color:#888">Segments:</span> <span style="color:#fff">${s.segmentCount}</span></div>` +
 				`<div style="margin-bottom:12px;font-size:14px;color:#888;letter-spacing:0.05em">ACTIVE LAYER</div>` +
 				`<div style="margin-bottom:6px"><span style="color:#888">Atlas:</span> <span style="color:${s.usingOthers ? "#e8a" : "#8ae"}">${atlasLabel}</span></div>` +
