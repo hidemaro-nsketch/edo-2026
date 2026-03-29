@@ -4,7 +4,7 @@
     "pages": [
       {
         "id": 0,
-        "file": "umebackground_atlas_0.png",
+        "file": "fujibackground_atlas_0.png",
         "width": 2048,
         "height": 2048
       }
@@ -16,32 +16,32 @@
   "categories": [
     {
       "id": 0,
-      "name": "umebackground",
+      "name": "fujibackground",
       "bit": 1
     }
   ],
   "segments": [
     {
       "id": 0,
-      "sourceImageId": "output-2a-2x-refine",
+      "sourceImageId": "output-2-2x-inv",
       "categoryId": 0,
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.116211,
         0.0,
+        0.55957,
         0.051758,
-        0.037598
+        0.1875
       ],
       "pixelRect": [
-        238,
         0,
+        1146,
         106,
-        77
+        384
       ],
       "trimmedSize": [
         106,
-        77
+        384
       ],
       "originalSize": [
         1024,
@@ -52,33 +52,33 @@
         0.5
       ],
       "bboxInSource": [
-        373,
-        254,
-        106,
-        77
+        625,
+        236,
+        218,
+        788
       ]
     },
     {
       "id": 1,
-      "sourceImageId": "output-2a-2x-refine",
+      "sourceImageId": "output-2-2x-inv",
       "categoryId": 0,
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
         0.0,
-        0.043945,
-        0.054199,
-        0.038086
+        0.191406,
+        0.091797,
+        0.1875
       ],
       "pixelRect": [
         0,
-        90,
-        111,
-        78
+        392,
+        188,
+        384
       ],
       "trimmedSize": [
-        111,
-        78
+        188,
+        384
       ],
       "originalSize": [
         1024,
@@ -89,33 +89,33 @@
         0.5
       ],
       "bboxInSource": [
-        156,
-        400,
-        111,
-        78
+        288,
+        154,
+        343,
+        700
       ]
     },
     {
       "id": 2,
-      "sourceImageId": "output-2a-2x-refine",
+      "sourceImageId": "output-2-2x-inv",
       "categoryId": 0,
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
         0.0,
         0.0,
-        0.056641,
-        0.040039
+        0.112305,
+        0.1875
       ],
       "pixelRect": [
         0,
         0,
-        116,
-        82
+        230,
+        384
       ],
       "trimmedSize": [
-        116,
-        82
+        230,
+        384
       ],
       "originalSize": [
         1024,
@@ -126,33 +126,33 @@
         0.5
       ],
       "bboxInSource": [
-        669,
-        291,
-        116,
-        82
+        136,
+        90,
+        429,
+        716
       ]
     },
     {
       "id": 3,
-      "sourceImageId": "output-2a-2x-refine",
+      "sourceImageId": "output-2-2x-inv",
       "categoryId": 0,
       "categoryMask": 1,
       "atlasPage": 0,
       "uvRect": [
-        0.060547,
         0.0,
-        0.051758,
-        0.041504
+        0.382812,
+        0.083984,
+        0.172852
       ],
       "pixelRect": [
-        124,
         0,
-        106,
-        85
+        784,
+        172,
+        354
       ],
       "trimmedSize": [
-        106,
-        85
+        172,
+        354
       ],
       "originalSize": [
         1024,
@@ -163,10 +163,10 @@
         0.5
       ],
       "bboxInSource": [
-        790,
-        447,
-        106,
-        85
+        852,
+        454,
+        172,
+        354
       ]
     }
   ]

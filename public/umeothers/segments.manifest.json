@@ -1,0 +1,1209 @@
+{
+  "version": 1,
+  "atlas": {
+    "pages": [
+      {
+        "id": 0,
+        "file": "ume_atlas_0.png",
+        "width": 2048,
+        "height": 2048
+      }
+    ],
+    "colorSpace": "srgb",
+    "premultipliedAlpha": true,
+    "paddingPx": 8
+  },
+  "categories": [
+    {
+      "id": 0,
+      "name": "ume",
+      "bit": 1
+    }
+  ],
+  "segments": [
+    {
+      "id": 0,
+      "sourceImageId": "ひなかた都商人-105_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.877441,
+        0.070312,
+        0.070801,
+        0.05127
+      ],
+      "pixelRect": [
+        1797,
+        144,
+        145,
+        105
+      ],
+      "trimmedSize": [
+        145,
+        105
+      ],
+      "originalSize": [
+        1152,
+        768
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        367,
+        41,
+        145,
+        105
+      ]
+    },
+    {
+      "id": 1,
+      "sourceImageId": "ひなかた都商人-105_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.503418,
+        0.227539,
+        0.072754,
+        0.050293
+      ],
+      "pixelRect": [
+        1031,
+        466,
+        149,
+        103
+      ],
+      "trimmedSize": [
+        149,
+        103
+      ],
+      "originalSize": [
+        1152,
+        768
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        676,
+        48,
+        149,
+        103
+      ]
+    },
+    {
+      "id": 2,
+      "sourceImageId": "ひなかた都商人-105_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.711914,
+        0.0,
+        0.109863,
+        0.061523
+      ],
+      "pixelRect": [
+        1458,
+        0,
+        225,
+        126
+      ],
+      "trimmedSize": [
+        225,
+        126
+      ],
+      "originalSize": [
+        1152,
+        768
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        75,
+        220,
+        225,
+        126
+      ]
+    },
+    {
+      "id": 3,
+      "sourceImageId": "ひなかた都商人-51_s06_str0.900_seed48",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.343262,
+        0.145996,
+        0.089844,
+        0.084473
+      ],
+      "pixelRect": [
+        703,
+        299,
+        184,
+        173
+      ],
+      "trimmedSize": [
+        184,
+        173
+      ],
+      "originalSize": [
+        1152,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        719,
+        498,
+        184,
+        173
+      ]
+    },
+    {
+      "id": 4,
+      "sourceImageId": "ひなかた都商人-51_s06_str0.900_seed48",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.612793,
+        0.145996,
+        0.070801,
+        0.063965
+      ],
+      "pixelRect": [
+        1255,
+        299,
+        145,
+        131
+      ],
+      "trimmedSize": [
+        145,
+        131
+      ],
+      "originalSize": [
+        1152,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        102,
+        239,
+        145,
+        131
+      ]
+    },
+    {
+      "id": 5,
+      "sourceImageId": "ひなかた都商人-54_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.973145,
+        0.189453,
+        0.022949,
+        0.023926
+      ],
+      "pixelRect": [
+        1993,
+        388,
+        47,
+        49
+      ],
+      "trimmedSize": [
+        47,
+        49
+      ],
+      "originalSize": [
+        1152,
+        768
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        381,
+        403,
+        47,
+        49
+      ]
+    },
+    {
+      "id": 6,
+      "sourceImageId": "ひなかた都商人-54_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.973145,
+        0.217285,
+        0.022461,
+        0.019043
+      ],
+      "pixelRect": [
+        1993,
+        445,
+        46,
+        39
+      ],
+      "trimmedSize": [
+        46,
+        39
+      ],
+      "originalSize": [
+        1152,
+        768
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        683,
+        204,
+        46,
+        39
+      ]
+    },
+    {
+      "id": 7,
+      "sourceImageId": "新雛形京小袖-49_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.944824,
+        0.125488,
+        0.04834,
+        0.060059
+      ],
+      "pixelRect": [
+        1935,
+        257,
+        99,
+        123
+      ],
+      "trimmedSize": [
+        99,
+        123
+      ],
+      "originalSize": [
+        1152,
+        896
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        300,
+        294,
+        99,
+        123
+      ]
+    },
+    {
+      "id": 8,
+      "sourceImageId": "新雛形京小袖-49_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.927734,
+        0.0,
+        0.059082,
+        0.066406
+      ],
+      "pixelRect": [
+        1900,
+        0,
+        121,
+        136
+      ],
+      "trimmedSize": [
+        121,
+        136
+      ],
+      "originalSize": [
+        1152,
+        896
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        731,
+        255,
+        121,
+        136
+      ]
+    },
+    {
+      "id": 9,
+      "sourceImageId": "源氏ひなかた-33_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.536621,
+        0.159668,
+        0.069336,
+        0.063965
+      ],
+      "pixelRect": [
+        1099,
+        327,
+        142,
+        131
+      ],
+      "trimmedSize": [
+        142,
+        131
+      ],
+      "originalSize": [
+        1152,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        515,
+        792,
+        142,
+        131
+      ]
+    },
+    {
+      "id": 10,
+      "sourceImageId": "源氏ひなかた-33_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.78418,
+        0.200195,
+        0.049316,
+        0.046875
+      ],
+      "pixelRect": [
+        1606,
+        410,
+        101,
+        96
+      ],
+      "trimmedSize": [
+        101,
+        96
+      ],
+      "originalSize": [
+        1152,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        596,
+        386,
+        101,
+        96
+      ]
+    },
+    {
+      "id": 11,
+      "sourceImageId": "相生雛かた-29_s02_str0.500_seed44",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.902832,
+        0.227051,
+        0.049316,
+        0.035645
+      ],
+      "pixelRect": [
+        1849,
+        465,
+        101,
+        73
+      ],
+      "trimmedSize": [
+        101,
+        73
+      ],
+      "originalSize": [
+        1152,
+        960
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        546,
+        323,
+        101,
+        73
+      ]
+    },
+    {
+      "id": 12,
+      "sourceImageId": "相生雛かた-29_s02_str0.500_seed44",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.902832,
+        0.189453,
+        0.066406,
+        0.033691
+      ],
+      "pixelRect": [
+        1849,
+        388,
+        136,
+        69
+      ],
+      "trimmedSize": [
+        136,
+        69
+      ],
+      "originalSize": [
+        1152,
+        960
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        814,
+        194,
+        136,
+        69
+      ]
+    },
+    {
+      "id": 13,
+      "sourceImageId": "美女ひなかた-8_s02_str0.500_seed44",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.845703,
+        0.177246,
+        0.053223,
+        0.047852
+      ],
+      "pixelRect": [
+        1732,
+        363,
+        109,
+        98
+      ],
+      "trimmedSize": [
+        109,
+        98
+      ],
+      "originalSize": [
+        1152,
+        576
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        680,
+        207,
+        109,
+        98
+      ]
+    },
+    {
+      "id": 14,
+      "sourceImageId": "美女ひなかた-8_s02_str0.500_seed44",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.711914,
+        0.06543,
+        0.07959,
+        0.074707
+      ],
+      "pixelRect": [
+        1458,
+        134,
+        163,
+        153
+      ],
+      "trimmedSize": [
+        163,
+        153
+      ],
+      "originalSize": [
+        1152,
+        576
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        495,
+        41,
+        163,
+        153
+      ]
+    },
+    {
+      "id": 15,
+      "sourceImageId": "花陽ひいなかた-55_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.437012,
+        0.145996,
+        0.095703,
+        0.07373
+      ],
+      "pixelRect": [
+        895,
+        299,
+        196,
+        151
+      ],
+      "trimmedSize": [
+        196,
+        151
+      ],
+      "originalSize": [
+        1152,
+        384
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        483,
+        40,
+        196,
+        151
+      ]
+    },
+    {
+      "id": 16,
+      "sourceImageId": "花陽ひいなかた-55_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.825684,
+        0.0,
+        0.098145,
+        0.06543
+      ],
+      "pixelRect": [
+        1691,
+        0,
+        201,
+        134
+      ],
+      "trimmedSize": [
+        201,
+        134
+      ],
+      "originalSize": [
+        1152,
+        384
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        706,
+        66,
+        201,
+        134
+      ]
+    },
+    {
+      "id": 17,
+      "sourceImageId": "花鳥雛形-21_s01_str0.400_seed43",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.191406,
+        0.0,
+        0.1875,
+        0.132324
+      ],
+      "pixelRect": [
+        392,
+        0,
+        384,
+        271
+      ],
+      "trimmedSize": [
+        384,
+        271
+      ],
+      "originalSize": [
+        1152,
+        768
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        340,
+        22,
+        518,
+        365
+      ]
+    },
+    {
+      "id": 18,
+      "sourceImageId": "花鳥雛形-71_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.191406,
+        0.13623,
+        0.147949,
+        0.140625
+      ],
+      "pixelRect": [
+        392,
+        279,
+        303,
+        288
+      ],
+      "trimmedSize": [
+        303,
+        288
+      ],
+      "originalSize": [
+        1152,
+        448
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        99,
+        20,
+        303,
+        288
+      ]
+    },
+    {
+      "id": 19,
+      "sourceImageId": "花鳥雛形-71_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.79541,
+        0.069336,
+        0.078125,
+        0.072754
+      ],
+      "pixelRect": [
+        1629,
+        142,
+        160,
+        149
+      ],
+      "trimmedSize": [
+        160,
+        149
+      ],
+      "originalSize": [
+        1152,
+        448
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        905,
+        255,
+        160,
+        149
+      ]
+    },
+    {
+      "id": 20,
+      "sourceImageId": "花鳥雛形-71_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.437012,
+        0.223633,
+        0.0625,
+        0.0625
+      ],
+      "pixelRect": [
+        895,
+        458,
+        128,
+        128
+      ],
+      "trimmedSize": [
+        128,
+        128
+      ],
+      "originalSize": [
+        1152,
+        448
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        805,
+        70,
+        128,
+        128
+      ]
+    },
+    {
+      "id": 21,
+      "sourceImageId": "花鳥雛形-71_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.382812,
+        0.0,
+        0.149902,
+        0.14209
+      ],
+      "pixelRect": [
+        784,
+        0,
+        307,
+        291
+      ],
+      "trimmedSize": [
+        307,
+        291
+      ],
+      "originalSize": [
+        1152,
+        448
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        98,
+        15,
+        307,
+        291
+      ]
+    },
+    {
+      "id": 22,
+      "sourceImageId": "花鳥雛形-71_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.343262,
+        0.234375,
+        0.064453,
+        0.059082
+      ],
+      "pixelRect": [
+        703,
+        480,
+        132,
+        121
+      ],
+      "trimmedSize": [
+        132,
+        121
+      ],
+      "originalSize": [
+        1152,
+        448
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        630,
+        202,
+        132,
+        121
+      ]
+    },
+    {
+      "id": 23,
+      "sourceImageId": "花鳥雛形-71_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.702637,
+        0.144043,
+        0.077637,
+        0.071289
+      ],
+      "pixelRect": [
+        1439,
+        295,
+        159,
+        146
+      ],
+      "trimmedSize": [
+        159,
+        146
+      ],
+      "originalSize": [
+        1152,
+        448
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        11,
+        245,
+        159,
+        146
+      ]
+    },
+    {
+      "id": 24,
+      "sourceImageId": "雛形愛染川-74_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.609863,
+        0.213867,
+        0.068848,
+        0.063477
+      ],
+      "pixelRect": [
+        1249,
+        438,
+        141,
+        130
+      ],
+      "trimmedSize": [
+        141,
+        130
+      ],
+      "originalSize": [
+        960,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        192,
+        768,
+        141,
+        130
+      ]
+    },
+    {
+      "id": 25,
+      "sourceImageId": "雛形愛染川-74_s00_str0.300_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.536621,
+        0.0,
+        0.072266,
+        0.155762
+      ],
+      "pixelRect": [
+        1099,
+        0,
+        148,
+        319
+      ],
+      "trimmedSize": [
+        148,
+        319
+      ],
+      "originalSize": [
+        960,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        793,
+        678,
+        148,
+        319
+      ]
+    },
+    {
+      "id": 26,
+      "sourceImageId": "雛形染色の山-21_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.877441,
+        0.125488,
+        0.063477,
+        0.047852
+      ],
+      "pixelRect": [
+        1797,
+        257,
+        130,
+        98
+      ],
+      "trimmedSize": [
+        130,
+        98
+      ],
+      "originalSize": [
+        1088,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        250,
+        458,
+        130,
+        98
+      ]
+    },
+    {
+      "id": 27,
+      "sourceImageId": "雛形染色の山-21_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.78418,
+        0.145996,
+        0.057617,
+        0.050293
+      ],
+      "pixelRect": [
+        1606,
+        299,
+        118,
+        103
+      ],
+      "trimmedSize": [
+        118,
+        103
+      ],
+      "originalSize": [
+        1088,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        355,
+        505,
+        118,
+        103
+      ]
+    },
+    {
+      "id": 28,
+      "sourceImageId": "雛形染色の山-21_s03_str0.600_seed45",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.18457,
+        0.138672,
+        0.116699
+      ],
+      "pixelRect": [
+        0,
+        378,
+        284,
+        239
+      ],
+      "trimmedSize": [
+        284,
+        239
+      ],
+      "originalSize": [
+        1088,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        592,
+        659,
+        284,
+        239
+      ]
+    },
+    {
+      "id": 29,
+      "sourceImageId": "雛形鶴の聲-101_s01_str0.400_seed43",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.612793,
+        0.0,
+        0.095215,
+        0.071289
+      ],
+      "pixelRect": [
+        1255,
+        0,
+        195,
+        146
+      ],
+      "trimmedSize": [
+        195,
+        146
+      ],
+      "originalSize": [
+        960,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        531,
+        589,
+        195,
+        146
+      ]
+    },
+    {
+      "id": 30,
+      "sourceImageId": "雛形鶴の聲-101_s01_str0.400_seed43",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.612793,
+        0.075195,
+        0.085938,
+        0.066895
+      ],
+      "pixelRect": [
+        1255,
+        154,
+        176,
+        137
+      ],
+      "trimmedSize": [
+        176,
+        137
+      ],
+      "originalSize": [
+        960,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        707,
+        572,
+        176,
+        137
+      ]
+    },
+    {
+      "id": 31,
+      "sourceImageId": "雛形鶴の聲-101_s01_str0.400_seed43",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.0,
+        0.1875,
+        0.180664
+      ],
+      "pixelRect": [
+        0,
+        0,
+        384,
+        370
+      ],
+      "trimmedSize": [
+        384,
+        370
+      ],
+      "originalSize": [
+        960,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        78,
+        578,
+        423,
+        408
+      ]
+    }
+  ]
+}

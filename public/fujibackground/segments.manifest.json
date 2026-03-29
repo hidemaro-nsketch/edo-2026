@@ -1,0 +1,469 @@
+{
+  "version": 1,
+  "atlas": {
+    "pages": [
+      {
+        "id": 0,
+        "file": "fuji_atlas_0.png",
+        "width": 2048,
+        "height": 2048
+      }
+    ],
+    "colorSpace": "srgb",
+    "premultipliedAlpha": true,
+    "paddingPx": 8
+  },
+  "categories": [
+    {
+      "id": 0,
+      "name": "fuji",
+      "bit": 1
+    }
+  ],
+  "segments": [
+    {
+      "id": 0,
+      "sourceImageId": "御ひいなかた上-69_s02_str0.356_seed44",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.174316,
+        0.382812,
+        0.052734,
+        0.1875
+      ],
+      "pixelRect": [
+        357,
+        784,
+        108,
+        384
+      ],
+      "trimmedSize": [
+        108,
+        384
+      ],
+      "originalSize": [
+        384,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        60,
+        16,
+        301,
+        1069
+      ]
+    },
+    {
+      "id": 1,
+      "sourceImageId": "御ひいなかた下-30_s00_str0.632_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.185547,
+        0.574219,
+        0.046387,
+        0.1875
+      ],
+      "pixelRect": [
+        380,
+        1176,
+        95,
+        384
+      ],
+      "trimmedSize": [
+        95,
+        384
+      ],
+      "originalSize": [
+        896,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        342,
+        176,
+        225,
+        909
+      ]
+    },
+    {
+      "id": 2,
+      "sourceImageId": "御ひいなかた下-30_s02_str0.472_seed44",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.108887,
+        0.382812,
+        0.061523,
+        0.1875
+      ],
+      "pixelRect": [
+        223,
+        784,
+        126,
+        384
+      ],
+      "trimmedSize": [
+        126,
+        384
+      ],
+      "originalSize": [
+        896,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        261,
+        167,
+        302,
+        917
+      ]
+    },
+    {
+      "id": 3,
+      "sourceImageId": "正徳ひな形全-10_s02_str0.477_seed44",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.104492,
+        0.574219,
+        0.077148,
+        0.1875
+      ],
+      "pixelRect": [
+        214,
+        1176,
+        158,
+        384
+      ],
+      "trimmedSize": [
+        158,
+        384
+      ],
+      "originalSize": [
+        896,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        122,
+        326,
+        294,
+        716
+      ]
+    },
+    {
+      "id": 4,
+      "sourceImageId": "正徳ひな形全-91_s00_str0.555_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.765625,
+        0.084473,
+        0.1875
+      ],
+      "pixelRect": [
+        0,
+        1568,
+        173,
+        384
+      ],
+      "trimmedSize": [
+        173,
+        384
+      ],
+      "originalSize": [
+        768,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        70,
+        373,
+        335,
+        742
+      ]
+    },
+    {
+      "id": 5,
+      "sourceImageId": "色紙御雛形-37_s02_str0.581_seed44",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.135254,
+        0.191406,
+        0.060059,
+        0.1875
+      ],
+      "pixelRect": [
+        277,
+        392,
+        123,
+        384
+      ],
+      "trimmedSize": [
+        123,
+        384
+      ],
+      "originalSize": [
+        1152,
+        832
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        726,
+        147,
+        199,
+        623
+      ]
+    },
+    {
+      "id": 6,
+      "sourceImageId": "西川夕紅葉-52_s01_str0.450_seed43",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.088379,
+        0.765625,
+        0.1875,
+        0.082031
+      ],
+      "pixelRect": [
+        181,
+        1568,
+        384,
+        168
+      ],
+      "trimmedSize": [
+        384,
+        168
+      ],
+      "originalSize": [
+        1152,
+        768
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        283,
+        327,
+        862,
+        378
+      ]
+    },
+    {
+      "id": 7,
+      "sourceImageId": "西川夕紅葉-70_s01_str0.607_seed43",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.0,
+        0.166016,
+        0.1875
+      ],
+      "pixelRect": [
+        0,
+        0,
+        340,
+        384
+      ],
+      "trimmedSize": [
+        340,
+        384
+      ],
+      "originalSize": [
+        1152,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        125,
+        437,
+        349,
+        394
+      ]
+    },
+    {
+      "id": 8,
+      "sourceImageId": "諸國御ひいなかた-144_s00_str0.471_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.382812,
+        0.10498,
+        0.1875
+      ],
+      "pixelRect": [
+        0,
+        784,
+        215,
+        384
+      ],
+      "trimmedSize": [
+        215,
+        384
+      ],
+      "originalSize": [
+        896,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        338,
+        10,
+        558,
+        998
+      ]
+    },
+    {
+      "id": 9,
+      "sourceImageId": "諸國御ひいなかた-182_s00_str0.362_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.574219,
+        0.100586,
+        0.1875
+      ],
+      "pixelRect": [
+        0,
+        1176,
+        206,
+        384
+      ],
+      "trimmedSize": [
+        206,
+        384
+      ],
+      "originalSize": [
+        896,
+        1152
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        150,
+        127,
+        363,
+        678
+      ]
+    },
+    {
+      "id": 10,
+      "sourceImageId": "諸國御ひいなかた-83_s00_str0.604_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.191406,
+        0.131348,
+        0.1875
+      ],
+      "pixelRect": [
+        0,
+        392,
+        269,
+        384
+      ],
+      "trimmedSize": [
+        269,
+        384
+      ],
+      "originalSize": [
+        1152,
+        832
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        328,
+        4,
+        581,
+        828
+      ]
+    },
+    {
+      "id": 11,
+      "sourceImageId": "雛形吉野山-88_s00_str0.401_seed42",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.169922,
+        0.0,
+        0.030273,
+        0.1875
+      ],
+      "pixelRect": [
+        348,
+        0,
+        62,
+        384
+      ],
+      "trimmedSize": [
+        62,
+        384
+      ],
+      "originalSize": [
+        1152,
+        896
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        259,
+        129,
+        112,
+        693
+      ]
+    }
+  ]
+}

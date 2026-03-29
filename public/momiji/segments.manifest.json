@@ -1,0 +1,617 @@
+{
+  "version": 1,
+  "atlas": {
+    "pages": [
+      {
+        "id": 0,
+        "file": "momijibackground_atlas_0.png",
+        "width": 2048,
+        "height": 2048
+      }
+    ],
+    "colorSpace": "srgb",
+    "premultipliedAlpha": true,
+    "paddingPx": 8
+  },
+  "categories": [
+    {
+      "id": 0,
+      "name": "momijibackground",
+      "bit": 1
+    }
+  ],
+  "segments": [
+    {
+      "id": 0,
+      "sourceImageId": "output-3-2x-inv - 白",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.368164,
+        0.08252,
+        0.055664,
+        0.052246
+      ],
+      "pixelRect": [
+        754,
+        169,
+        114,
+        107
+      ],
+      "trimmedSize": [
+        114,
+        107
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        391,
+        329,
+        114,
+        107
+      ]
+    },
+    {
+      "id": 1,
+      "sourceImageId": "output-3-2x-inv - 白",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.154785,
+        0.060547,
+        0.069824
+      ],
+      "pixelRect": [
+        0,
+        317,
+        124,
+        143
+      ],
+      "trimmedSize": [
+        124,
+        143
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        37,
+        520,
+        124,
+        143
+      ]
+    },
+    {
+      "id": 2,
+      "sourceImageId": "output-3-2x-inv - 白",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.081543,
+        0.07666,
+        0.069336
+      ],
+      "pixelRect": [
+        0,
+        167,
+        157,
+        142
+      ],
+      "trimmedSize": [
+        157,
+        142
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        100,
+        184,
+        157,
+        142
+      ]
+    },
+    {
+      "id": 3,
+      "sourceImageId": "output-3-2x-inv - 白",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.103516,
+        0.0,
+        0.08252,
+        0.084473
+      ],
+      "pixelRect": [
+        212,
+        0,
+        169,
+        173
+      ],
+      "trimmedSize": [
+        169,
+        173
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        669,
+        515,
+        169,
+        173
+      ]
+    },
+    {
+      "id": 4,
+      "sourceImageId": "output-3-2x-inv - 白",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.381348,
+        0.0,
+        0.063477,
+        0.078613
+      ],
+      "pixelRect": [
+        781,
+        0,
+        130,
+        161
+      ],
+      "trimmedSize": [
+        130,
+        161
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        742,
+        52,
+        130,
+        161
+      ]
+    },
+    {
+      "id": 5,
+      "sourceImageId": "output-3-2x-inv - 白",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.189941,
+        0.0,
+        0.101074,
+        0.067871
+      ],
+      "pixelRect": [
+        389,
+        0,
+        207,
+        139
+      ],
+      "trimmedSize": [
+        207,
+        139
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        385,
+        1,
+        207,
+        139
+      ]
+    },
+    {
+      "id": 6,
+      "sourceImageId": "output-3-2x-inv - 白",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.515625,
+        0.0,
+        0.051758,
+        0.060547
+      ],
+      "pixelRect": [
+        1056,
+        0,
+        106,
+        124
+      ],
+      "trimmedSize": [
+        106,
+        124
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        276,
+        725,
+        106,
+        124
+      ]
+    },
+    {
+      "id": 7,
+      "sourceImageId": "output-3-2x-inv - 白",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.571289,
+        0.0,
+        0.046387,
+        0.062012
+      ],
+      "pixelRect": [
+        1170,
+        0,
+        95,
+        127
+      ],
+      "trimmedSize": [
+        95,
+        127
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        636,
+        806,
+        95,
+        127
+      ]
+    },
+    {
+      "id": 8,
+      "sourceImageId": "output-3-2x-inv - 白",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.44873,
+        0.0,
+        0.062988,
+        0.056152
+      ],
+      "pixelRect": [
+        919,
+        0,
+        129,
+        115
+      ],
+      "trimmedSize": [
+        129,
+        115
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        895,
+        367,
+        129,
+        115
+      ]
+    },
+    {
+      "id": 9,
+      "sourceImageId": "output-3-2x-inv - 黒",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.44873,
+        0.060059,
+        0.057129,
+        0.053711
+      ],
+      "pixelRect": [
+        919,
+        123,
+        117,
+        110
+      ],
+      "trimmedSize": [
+        117,
+        110
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        419,
+        412,
+        117,
+        110
+      ]
+    },
+    {
+      "id": 10,
+      "sourceImageId": "output-3-2x-inv - 黒",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.294922,
+        0.0,
+        0.08252,
+        0.0625
+      ],
+      "pixelRect": [
+        604,
+        0,
+        169,
+        128
+      ],
+      "trimmedSize": [
+        169,
+        128
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        659,
+        426,
+        169,
+        128
+      ]
+    },
+    {
+      "id": 11,
+      "sourceImageId": "output-3-2x-inv - 黒",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.080566,
+        0.088379,
+        0.067871,
+        0.066895
+      ],
+      "pixelRect": [
+        165,
+        181,
+        139,
+        137
+      ],
+      "trimmedSize": [
+        139,
+        137
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        297,
+        620,
+        139,
+        137
+      ]
+    },
+    {
+      "id": 12,
+      "sourceImageId": "output-3-2x-inv - 黒",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.189941,
+        0.071777,
+        0.061523,
+        0.074707
+      ],
+      "pixelRect": [
+        389,
+        147,
+        126,
+        153
+      ],
+      "trimmedSize": [
+        126,
+        153
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        83,
+        831,
+        126,
+        153
+      ]
+    },
+    {
+      "id": 13,
+      "sourceImageId": "output-3-2x-inv - 黒",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.294922,
+        0.066406,
+        0.069336,
+        0.069336
+      ],
+      "pixelRect": [
+        604,
+        136,
+        142,
+        142
+      ],
+      "trimmedSize": [
+        142,
+        142
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        870,
+        143,
+        142,
+        142
+      ]
+    },
+    {
+      "id": 14,
+      "sourceImageId": "output-3-2x-inv - 黒",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.0,
+        0.0,
+        0.099609,
+        0.077637
+      ],
+      "pixelRect": [
+        0,
+        0,
+        204,
+        159
+      ],
+      "trimmedSize": [
+        204,
+        159
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        771,
+        616,
+        204,
+        159
+      ]
+    },
+    {
+      "id": 15,
+      "sourceImageId": "output-3-2x-inv - 黒",
+      "categoryId": 0,
+      "categoryMask": 1,
+      "atlasPage": 0,
+      "uvRect": [
+        0.509766,
+        0.064453,
+        0.053711,
+        0.044922
+      ],
+      "pixelRect": [
+        1044,
+        132,
+        110,
+        92
+      ],
+      "trimmedSize": [
+        110,
+        92
+      ],
+      "originalSize": [
+        1024,
+        1024
+      ],
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "bboxInSource": [
+        506,
+        261,
+        110,
+        92
+      ]
+    }
+  ]
+}
