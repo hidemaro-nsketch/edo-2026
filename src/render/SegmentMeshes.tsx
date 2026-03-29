@@ -99,13 +99,19 @@ export function SegmentMeshes({
 			});
 		}
 
-		// Compute dim factor
+		// Compute dim factor (separate in/out durations, with hold)
 		const phase = buildSystem.state.phase;
-		const dimTarget = phase === "swipe" ? (swipeEffect?.dimFactor ?? 0.3) : 1.0;
-		const DIM_FADE_SPEED = 8.0;
+		const stayDim = phase === "swipe" || phase === "dimming"
+			|| (phase === "hold" && buildSystem.state.phaseTime < buildSystem.config.dimHoldTime);
+		const dimTarget = stayDim ? (swipeEffect?.dimFactor ?? 0.3) : 1.0;
+		const isDimming = dimTarget < currentDimRef.current;
+		const dimDuration = isDimming
+			? buildSystem.config.dimFadeInDuration
+			: buildSystem.config.dimFadeOutDuration;
+		const dimSpeed = 4.6 / Math.max(0.01, dimDuration);
 		currentDimRef.current +=
 			(dimTarget - currentDimRef.current) *
-			Math.min(1, delta * DIM_FADE_SPEED);
+			Math.min(1, delta * dimSpeed);
 	});
 
 	const getSegmentsForLayer = useCallback(

@@ -7,6 +7,7 @@ import {
 	// buildPreCollapseFlashInstances,
 	buildSettledRenderInstancesForLayer,
 	buildSwipeRenderInstancesForLayer,
+	getAtlasSelectionForLayer,
 } from "./render-snapshot";
 import type {
 	BlackFillRenderInstance,
@@ -82,6 +83,9 @@ export class BuildSystem {
 			case "flash":
 				this.updateFlash(deltaTime);
 				return;
+			case "dimming":
+				this.updateDimming(deltaTime);
+				return;
 			case "swipe":
 				this.updateSwipe(deltaTime);
 				return;
@@ -104,6 +108,15 @@ export class BuildSystem {
 		}
 	}
 
+	private transitionToSwipeOrDimming(): void {
+		if (this.config.dimLeadTime > 0) {
+			this.state.phase = "dimming";
+		} else {
+			this.state.phase = "swipe";
+		}
+		this.state.phaseTime = 0;
+	}
+
 	private updateFlash(dt: number): void {
 		const flashTargets = buildFlashRenderInstancesForLayer(
 			this.plan,
@@ -111,13 +124,19 @@ export class BuildSystem {
 			this.state.currentLayer,
 		);
 		if (flashTargets.length === 0 || this.getFlashDuration() <= 0) {
-			this.state.phase = "swipe";
-			this.state.phaseTime = 0;
+			this.transitionToSwipeOrDimming();
 			return;
 		}
 
 		this.state.phaseTime += dt;
 		if (this.state.phaseTime >= this.getFlashDuration()) {
+			this.transitionToSwipeOrDimming();
+		}
+	}
+
+	private updateDimming(dt: number): void {
+		this.state.phaseTime += dt;
+		if (this.state.phaseTime >= this.config.dimLeadTime) {
 			this.state.phase = "swipe";
 			this.state.phaseTime = 0;
 		}
@@ -247,6 +266,28 @@ export class BuildSystem {
 		// 	);
 		// }
 
+		// Dimming phase: show swap-target segments as active (undimmed) at their current positions
+		if (phase === "dimming") {
+			const legs = this.plan.legsByLayer[currentLayer] ?? [];
+			const instances: SegmentRenderInstance[] = [];
+			for (const leg of legs) {
+				if (leg.mode !== "settle") continue;
+				instances.push({
+					segId: leg.segId,
+					x: leg.from[0],
+					y: leg.from[1],
+					z: leg.from[2],
+					w: leg.fromSize[0],
+					h: leg.fromSize[1],
+					useOthersAtlas: getAtlasSelectionForLayer(leg.toLayer - 1, this.config),
+					wipeRole: 0,
+					isBboxOutline: 0,
+					swipeProgress: 0,
+				});
+			}
+			return instances;
+		}
+
 		if (phase === "idle" || phase === "complete") {
 			return [];
 		}
@@ -350,10 +391,13 @@ export class BuildSystem {
 		return this.state.currentLayer;
 	}
 
-	/** Returns 0..1 fade-out progress during holding phase (0 = fully visible, 1 = fully faded) */
+	/** Returns 0..1 fade-out progress during holding phase (0 = fully visible, 1 = fully faded), easeInBack */
 	getFadeOutProgress(): number {
 		if (this.state.phase !== "holding") return 0;
-		return Math.min(this.state.phaseTime / this.config.holdAfterComplete, 1);
+		const t = Math.min(this.state.phaseTime / this.config.holdAfterComplete, 1);
+		// easeInBack: slight overshoot before accelerating
+		const s = 1.70158;
+		return t * t * ((s + 1) * t - s);
 	}
 
 	getDebugLabel(): string {
@@ -419,6 +463,7 @@ export class BuildSystem {
 	private getMaxSettledLayer(): number {
 		switch (this.state.phase) {
 			case "flash":
+			case "dimming":
 			case "swipe":
 			case "hold":
 				return this.state.currentLayer - 1;

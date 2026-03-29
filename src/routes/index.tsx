@@ -388,6 +388,10 @@ function useDebugGui(): DebugGuiResult {
 		...animation,
 		...layers,
 		...collapse,
+		dimFadeInDuration: DEFAULT_CONFIG.dimFadeInDuration,
+		dimFadeOutDuration: DEFAULT_CONFIG.dimFadeOutDuration,
+		dimHoldTime: DEFAULT_CONFIG.dimHoldTime,
+		dimLeadTime: DEFAULT_CONFIG.dimLeadTime,
 		categoryStartLayer: DEFAULT_CONFIG.categoryStartLayer,
 		sourceImageStartLayer: DEFAULT_CONFIG.sourceImageStartLayer,
 		contentStartLayer: layers.contentStartLayer,
@@ -526,9 +530,13 @@ function ShuffleContent({
 	// Update background dim ref + scene status per-frame
 	useFrame((_, delta) => {
 		const phase = system.state.phase;
-		const dimTarget = phase === "swipe" ? swipeEffect.dimFactor : 1.0;
-		const DIM_FADE_SPEED = 8.0;
-		bgDimRef.current += (dimTarget - bgDimRef.current) * Math.min(1, delta * DIM_FADE_SPEED);
+		const stayDim = phase === "swipe" || phase === "dimming"
+			|| (phase === "hold" && system.state.phaseTime < config.dimHoldTime);
+		const dimTarget = stayDim ? swipeEffect.dimFactor : 1.0;
+		const isDimming = dimTarget < bgDimRef.current;
+		const dimDuration = isDimming ? config.dimFadeInDuration : config.dimFadeOutDuration;
+		const dimSpeed = 4.6 / Math.max(0.01, dimDuration);
+		bgDimRef.current += (dimTarget - bgDimRef.current) * Math.min(1, delta * dimSpeed);
 
 		// Write status for HTML panel (no React re-render)
 		if (statusRef) {
@@ -816,6 +824,10 @@ function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }
 			collapseStagger: gui.collapseStagger ?? DEFAULT_CONFIG.collapseStagger,
 			holdAfterComplete:
 				gui.holdAfterComplete ?? DEFAULT_CONFIG.holdAfterComplete,
+			dimFadeInDuration: DEFAULT_CONFIG.dimFadeInDuration,
+			dimFadeOutDuration: DEFAULT_CONFIG.dimFadeOutDuration,
+			dimHoldTime: DEFAULT_CONFIG.dimHoldTime,
+			dimLeadTime: DEFAULT_CONFIG.dimLeadTime,
 			categoryStartLayer: DEFAULT_CONFIG.categoryStartLayer,
 			sourceImageStartLayer: DEFAULT_CONFIG.sourceImageStartLayer,
 			contentStartLayer:
