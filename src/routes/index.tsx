@@ -34,18 +34,44 @@ import {
 import { KIMONO_SIZE } from "../sakura/constants";
 import { loadAtlasTextures } from "../sakura/segment-manager"; // アトラス画像の読み込み・テクスチャ化
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
+import {
+	getAvailableThemes,
+	getNextThemeIndex,
+	type ThemeConfig,
+} from "../themes/theme-config";
 
 /** TanStack Router: "/" パスにこのページを登録 */
 export const Route = createFileRoute("/")({ component: App });
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-/** public/ 配下の静的アセットのベースパス */
-const SAKURA_BASE_PATH = "/sakura";
-/** "others" フォルダ: 別画像ソースのアトラス（レイアウトは sakura のまま、描画内容だけ差し替え） */
-const OTHERS_BASE_PATH = "/sakuraothers";
-const KIMONO_BG_PATH = "/sakura/kimono_bg_inv.jpg"; // 着物全体の背景画像（反転版）
+/** Available themes for sequential rotation */
+const AVAILABLE_THEMES = getAvailableThemes();
 const INITIAL_PLAN_SEED = 42;
+
+// ─── Scene Status (shared via ref between R3F and HTML) ────────────────────
+
+/** Mutable status object written per-frame inside R3F, read by HTML panel */
+type SceneStatus = {
+	themeId: string;
+	themeName: string;
+	themeIndex: number;
+	themeCount: number;
+	phase: string;
+	currentLayer: number;
+	maxLayers: number;
+	phaseTime: number;
+	segmentCount: number;
+	loading: boolean;
+	/** Swap pairs for the current layer: [slotA, slotB][] */
+	activeSwaps: [number, number][];
+	/** Slot→segment mapping at current layer */
+	slotMapping: number[];
+	/** Whether current layer uses "others" atlas */
+	usingOthers: boolean;
+	/** Set of segment indices that were replaced with others content (via merge) */
+	othersSegIndices: Set<number>;
+};
 
 // ─── Manifest loader ────────────────────────────────────────────────────────
 
@@ -55,7 +81,7 @@ const INITIAL_PLAN_SEED = 42;
  * ロード失敗時は null を返し、画面は何も表示しない（静かに失敗）。
  */
 async function loadManifest(
-	basePath: string = SAKURA_BASE_PATH,
+	basePath: string,
 ): Promise<SegmentManifest | null> {
 	try {
 		const res = await fetch(`${basePath}/segments.manifest.json`);
@@ -103,6 +129,110 @@ function mergeSegmentsWithOthersContent(
 			atlasPage: content.atlasPage,
 		};
 	});
+}
+
+// ─── Theme Asset Loading ───────────────────────────────────────────────────
+
+/** Result of loading all assets for a single theme */
+type ThemeAssets = {
+	theme: ThemeConfig;
+	segments: SegmentInfo[];
+	originalSegments: SegmentInfo[];
+	atlasTexture: Texture;
+	othersAtlasTexture: Texture | null;
+	kimonoTexture: Texture | null;
+	/** All textures to dispose on cleanup */
+	allTextures: Texture[];
+};
+
+/**
+ * Load all assets for a given theme configuration.
+ * Returns null if the layout manifest or atlas fails to load.
+ */
+async function loadThemeAssets(
+	theme: ThemeConfig,
+	signal?: AbortSignal,
+): Promise<ThemeAssets | null> {
+	const textures: Texture[] = [];
+
+	// Load layout manifest (required)
+	const layoutManifest = await loadManifest(theme.layoutBasePath);
+	if (!layoutManifest || signal?.aborted) return null;
+
+	// Load content (others) manifest (optional)
+	const contentManifest = theme.contentBasePath
+		? await loadManifest(theme.contentBasePath)
+		: null;
+	if (signal?.aborted) return null;
+
+	const originalSegments = layoutManifest.segments;
+
+	// Merge content if available
+	let segments: SegmentInfo[];
+	if (contentManifest) {
+		segments = mergeSegmentsWithOthersContent(
+			layoutManifest.segments,
+			contentManifest.segments,
+		);
+	} else {
+		segments = layoutManifest.segments;
+	}
+
+	// Load layout atlas (required)
+	let atlasTexture: Texture;
+	try {
+		const loaded = await loadAtlasTextures(
+			layoutManifest,
+			`${theme.layoutBasePath}/atlas`,
+		);
+		if (signal?.aborted) return null;
+		textures.push(...loaded);
+		if (loaded.length === 0) return null;
+		atlasTexture = loaded[0];
+	} catch {
+		return null;
+	}
+
+	// Load others atlas (optional)
+	let othersAtlasTexture: Texture | null = null;
+	if (contentManifest && theme.contentBasePath) {
+		try {
+			const loaded = await loadAtlasTextures(
+				contentManifest,
+				`${theme.contentBasePath}/atlas`,
+			);
+			if (signal?.aborted) return null;
+			textures.push(...loaded);
+			if (loaded.length > 0) {
+				othersAtlasTexture = loaded[0];
+			}
+		} catch {
+			// Others atlas is optional — continue without it
+		}
+	}
+
+	// Load background image
+	let kimonoTexture: Texture | null = null;
+	try {
+		const loader = new TextureLoader();
+		const bgTex = await loader.loadAsync(theme.backgroundPath);
+		if (signal?.aborted) return null;
+		bgTex.colorSpace = SRGBColorSpace;
+		textures.push(bgTex);
+		kimonoTexture = bgTex;
+	} catch {
+		// Background is optional — continue without it
+	}
+
+	return {
+		theme,
+		segments,
+		originalSegments,
+		atlasTexture,
+		othersAtlasTexture,
+		kimonoTexture,
+		allTextures: textures,
+	};
 }
 
 // ─── Debug GUI ──────────────────────────────────────────────────────────────
@@ -304,6 +434,10 @@ type ShuffleContentProps = {
 	debugControls: DebugControls;
 	swipeEffect: SwipeEffectParams;
 	bgDimRef: React.MutableRefObject<number>;
+	/** Called when the animation cycle completes (idle), to trigger theme switch */
+	onCycleComplete?: () => void;
+	/** Shared mutable status for the HTML status panel */
+	statusRef?: React.MutableRefObject<SceneStatus>;
 };
 
 /**
@@ -327,6 +461,8 @@ function ShuffleContent({
 	debugControls,
 	swipeEffect,
 	bgDimRef,
+	onCycleComplete,
+	statusRef,
 }: ShuffleContentProps) {
 	const systemRef = useRef<BuildSystem | null>(null);
 	const lastResetRef = useRef(0);
@@ -353,12 +489,49 @@ function ShuffleContent({
 
 	const system = systemRef.current;
 
-	// Update background dim ref per-frame based on swipe phase (smooth fade)
+	// Pre-compute which segment indices were replaced with "others" content.
+	// Compare merged segments vs originalSegments by uvRect reference.
+	const othersIndices = useMemo(() => {
+		const set = new Set<number>();
+		for (let i = 0; i < segments.length; i++) {
+			if (segments[i].uvRect !== originalSegments[i]?.uvRect) {
+				set.add(i);
+			}
+		}
+		return set;
+	}, [segments, originalSegments]);
+
+	// Sync othersSegIndices once
+	if (statusRef) {
+		statusRef.current.othersSegIndices = othersIndices;
+	}
+
+	// Update background dim ref + scene status per-frame
 	useFrame((_, delta) => {
 		const phase = system.state.phase;
 		const dimTarget = phase === "swipe" ? swipeEffect.dimFactor : 1.0;
 		const DIM_FADE_SPEED = 8.0;
 		bgDimRef.current += (dimTarget - bgDimRef.current) * Math.min(1, delta * DIM_FADE_SPEED);
+
+		// Write status for HTML panel (no React re-render)
+		if (statusRef) {
+			const s = statusRef.current;
+			const { phase, currentLayer } = system.state;
+			s.phase = phase;
+			s.currentLayer = currentLayer;
+			s.phaseTime = system.state.phaseTime;
+
+			s.usingOthers = currentLayer >= config.contentStartLayer;
+
+			const plan = system.plan;
+			if (currentLayer >= 1 && currentLayer < plan.legsByLayer.length) {
+				s.activeSwaps = plan.swapsByLayer[currentLayer] ?? [];
+				s.slotMapping = plan.mappingByLayer[currentLayer] ?? [];
+			} else {
+				s.activeSwaps = [];
+				s.slotMapping = [];
+			}
+		}
 	});
 
 	return (
@@ -367,6 +540,7 @@ function ShuffleContent({
 				buildSystem={system}
 				config={config}
 				createNextPlan={createNextPlan}
+				onCycleComplete={onCycleComplete}
 			/>
 			<SegmentMeshes
 				segments={segments}
@@ -387,7 +561,8 @@ function ShuffleContent({
  * カメラ追従 + アニメーションのライフサイクル管理。
  *
  * 毎フレーム（useFrame）で以下を実行:
- *   1. BuildSystem が idle フェーズになったら新しいプランで自動リスタート
+ *   1. BuildSystem が idle フェーズになったら onCycleComplete でテーマ切り替えを通知
+ *      （onCycleComplete がない場合は同テーマ内で新プランで再開）
  *   2. 現在のレイヤー番号を ref で CameraRig に渡し、カメラが追従
  *
  * ref を使うことで React の再レンダーを回避し、60fps でスムーズに更新する。
@@ -396,24 +571,44 @@ function CameraAndLifecycle({
 	buildSystem,
 	config,
 	createNextPlan,
+	onCycleComplete,
 }: {
 	buildSystem: BuildSystem;
 	config: ShuffleConfig;
 	createNextPlan: () => ReturnType<typeof compilePlan>;
+	onCycleComplete?: () => void;
 }) {
 	const currentLayerRef = useRef(1);
+	const cycleCompleteCalledRef = useRef(false);
+	const prevPhaseRef = useRef<string>("");
 
 	useFrame(() => {
-		// アニメーション完了 → idle に遷移したら、新しいシャッフルプランで再開
-		if (buildSystem.state.phase === "idle") {
-			const plan = createNextPlan();
-			buildSystem.reset(plan);
-			currentLayerRef.current = 1;
+		const phase = buildSystem.state.phase;
+
+		// Reset guard only on idle→non-idle transition
+		if (prevPhaseRef.current === "idle" && phase !== "idle") {
+			cycleCompleteCalledRef.current = false;
+		}
+		prevPhaseRef.current = phase;
+
+		// アニメーション完了 → idle に遷移したらテーマ切り替え or 同テーマ再開
+		if (phase === "idle") {
+			if (onCycleComplete && !cycleCompleteCalledRef.current) {
+				// Notify parent to switch theme (will unmount this component via key change)
+				cycleCompleteCalledRef.current = true;
+				onCycleComplete();
+			} else if (!onCycleComplete) {
+				// No theme switching — restart with new plan in same theme
+				const plan = createNextPlan();
+				buildSystem.reset(plan);
+				currentLayerRef.current = 1;
+			}
+			return;
 		}
 
 		// 現在レイヤーを ref 経由で CameraRig に伝達（setState を避けてパフォーマンス維持）
 		// カメラの斜め移行は preCollapse 以降のみ。swipe/hold 中は maxGenerations 未満に抑える
-		const { phase, currentLayer } = buildSystem.state;
+		const { currentLayer } = buildSystem.state;
 		const isPostComplete =
 			phase === "preCollapse" || phase === "collapsing" || phase === "holding";
 		currentLayerRef.current = isPostComplete
@@ -436,116 +631,119 @@ function CameraAndLifecycle({
 /**
  * シーン全体の初期化と描画構成を管理するコンポーネント。
  *
- * マウント時に以下を非同期ロード:
- *   1. セグメントマニフェスト（segments.manifest.json）
- *   2. アトラステクスチャ（セグメント画像をまとめたスプライトシート）
- *   3. 着物背景画像（kimono_bg_inv.jpg）
+ * テーマシーケンスシステム:
+ *   - 利用可能なテーマ（sakura, ume 等）を順番にローテーション
+ *   - アニメーション完了(idle)後、次のテーマのアセットをプリロード
+ *   - ロード完了後に自動的に次のテーマに切り替え
  *
- * ロード完了後に ShuffleContent + KimonoBackground を描画する。
+ * マウント時に最初のテーマのアセットを非同期ロード:
+ *   1. segments.manifest.json からセグメント定義をロード
+ *   2. アトラステクスチャ（スプライトシート）と着物背景画像をロード
+ *   3. BuildSystem がシャッフル計画に従ってフレームごとにアニメーション状態を更新
+ *   4. SegmentMeshes / ConnectionLines / KimonoBackground で描画
+ *   5. アニメーション完了後 idle → 次のテーマをロードして自動リスタート
+ *
  * アンマウント時はすべてのテクスチャを dispose してメモリを解放する。
  */
-function Scene() {
-	const [segments, setSegments] = useState<SegmentInfo[]>([]);
-	const [originalSegments, setOriginalSegments] = useState<SegmentInfo[]>([]);
-	const [atlasTexture, setAtlasTexture] = useState<Texture | null>(null);
-	const [othersAtlasTexture, setOthersAtlasTexture] = useState<Texture | null>(
-		null,
-	);
-	const [kimonoTexture, setKimonoTexture] = useState<Texture | null>(null);
+function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }) {
+	const [themeAssets, setThemeAssets] = useState<ThemeAssets | null>(null);
+	const themeIndexRef = useRef(0);
+	const themeAssetsRef = useRef<ThemeAssets | null>(null);
+	const transitionAbortRef = useRef<AbortController | null>(null);
 	const gui = useDebugGui();
 
+	// Keep ref in sync with state (avoids stale closure in onCycleComplete)
+	themeAssetsRef.current = themeAssets;
+
+	// Initial theme load
 	useEffect(() => {
-		let disposed = false; // コンポーネントがアンマウントされたか追跡
-		const textures: Texture[] = []; // クリーンアップ対象のテクスチャを蓄積
+		const controller = new AbortController();
 
 		async function init() {
-			// ① 両マニフェスト読み込み（レイアウト用 + 描画内容用）
-			const [layoutManifest, contentManifest] = await Promise.all([
-				loadManifest(SAKURA_BASE_PATH),
-				loadManifest(OTHERS_BASE_PATH),
-			]);
-			if (!layoutManifest || disposed) return;
-
-			// 元のセグメント（レイアウト＋元のUV）を保持
-			setOriginalSegments(layoutManifest.segments);
-
-			// others マニフェストがあれば描画内容を差し替え、なければ元のまま
-			if (contentManifest) {
-				const merged = mergeSegmentsWithOthersContent(
-					layoutManifest.segments,
-					contentManifest.segments,
-				);
-				setSegments(merged);
+			const theme = AVAILABLE_THEMES[0];
+			if (!theme) return;
+			const assets = await loadThemeAssets(theme, controller.signal);
+			if (!controller.signal.aborted && assets) {
 				console.log(
-					`Merged: ${layoutManifest.segments.length} layout slots ` +
-						`with ${contentManifest.segments.length} content segments`,
+					`Theme [${theme.id}] loaded: ${assets.segments.length} segments`,
 				);
-			} else {
-				setSegments(layoutManifest.segments);
-				console.warn("Others manifest not found, using original segments");
-			}
-
-			// ② アトラステクスチャ読み込み — 元のアトラスは常にロード
-			try {
-				const loaded = await loadAtlasTextures(
-					layoutManifest,
-					`${SAKURA_BASE_PATH}/atlas`,
-				);
-				if (disposed) return;
-				textures.push(...loaded);
-				if (loaded.length > 0) {
-					setAtlasTexture(loaded[0]);
-				}
-			} catch (err) {
-				console.warn("Layout atlas loading failed:", err);
-			}
-
-			// others アトラスも別途ロード（contentStartLayer 以降で使用）
-			if (contentManifest) {
-				try {
-					const loaded = await loadAtlasTextures(
-						contentManifest,
-						`${OTHERS_BASE_PATH}/atlas`,
-					);
-					if (disposed) return;
-					textures.push(...loaded);
-					if (loaded.length > 0) {
-						setOthersAtlasTexture(loaded[0]);
-					}
-				} catch (err) {
-					console.warn("Others atlas loading failed:", err);
-				}
-			}
-
-			// ③ 着物全体の背景画像を読み込み（反転版）
-			try {
-				const loader = new TextureLoader();
-				const bgTex = await loader.loadAsync(`${KIMONO_BG_PATH}`);
-				if (disposed) return;
-				bgTex.colorSpace = SRGBColorSpace; // sRGB 色空間を明示（色味の正確性のため）
-				textures.push(bgTex);
-				setKimonoTexture(bgTex);
-			} catch (err) {
-				console.warn("Kimono background loading failed:", err);
-			}
-
-			if (!disposed) {
-				console.log(
-					`Loaded: ${layoutManifest.segments.length} segments, kimono background`,
-				);
+				statusRef.current.themeId = theme.id;
+				statusRef.current.themeName = theme.displayName;
+				statusRef.current.themeIndex = 0;
+				statusRef.current.themeCount = AVAILABLE_THEMES.length;
+				statusRef.current.segmentCount = assets.segments.length;
+				statusRef.current.maxLayers = gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations;
+				statusRef.current.loading = false;
+				setThemeAssets(assets);
 			}
 		}
 
 		init();
 
-		// クリーンアップ: GPU メモリからテクスチャを解放
 		return () => {
-			disposed = true;
-			for (const tex of textures) {
-				tex.dispose();
+			controller.abort();
+		};
+	}, []);
+
+	// Cleanup textures on unmount
+	useEffect(() => {
+		return () => {
+			transitionAbortRef.current?.abort();
+			if (themeAssetsRef.current) {
+				for (const tex of themeAssetsRef.current.allTextures) {
+					tex.dispose();
+				}
 			}
 		};
 	}, []);
+
+	/**
+	 * Called by ShuffleContent when animation cycle completes (idle).
+	 * Loads the next theme's assets and transitions.
+	 * Uses refs to avoid stale closures — stable identity, no deps needed.
+	 */
+	const onCycleComplete = useRef(async () => {
+		// Abort any in-flight transition load
+		transitionAbortRef.current?.abort();
+		const controller = new AbortController();
+		transitionAbortRef.current = controller;
+
+		const nextIndex = getNextThemeIndex(
+			themeIndexRef.current,
+			AVAILABLE_THEMES,
+		);
+		const nextTheme = AVAILABLE_THEMES[nextIndex];
+		if (!nextTheme) return;
+
+		console.log(
+			`Theme sequence: ${AVAILABLE_THEMES[themeIndexRef.current]?.id} → ${nextTheme.id}`,
+		);
+		statusRef.current.loading = true;
+
+		const assets = await loadThemeAssets(nextTheme, controller.signal);
+		if (controller.signal.aborted) return;
+		if (assets) {
+			// Dispose previous assets via ref (never stale)
+			const prev = themeAssetsRef.current;
+			themeIndexRef.current = nextIndex;
+			statusRef.current.themeId = nextTheme.id;
+			statusRef.current.themeName = nextTheme.displayName;
+			statusRef.current.themeIndex = nextIndex;
+			statusRef.current.segmentCount = assets.segments.length;
+			statusRef.current.loading = false;
+			setThemeAssets(assets);
+			console.log(
+				`Theme [${nextTheme.id}] loaded: ${assets.segments.length} segments`,
+			);
+
+			// Dispose previous after state update
+			if (prev) {
+				for (const tex of prev.allTextures) {
+					tex.dispose();
+				}
+			}
+		}
+	}).current;
 
 	// GUI の値を ShuffleConfig 型に変換（未設定時はデフォルト値にフォールバック）
 	const config: ShuffleConfig = useMemo(
@@ -584,45 +782,157 @@ function Scene() {
 		],
 	);
 
+	// Keep maxLayers in sync with GUI
+	statusRef.current.maxLayers = config.maxGenerations;
+
 	// Background dim factor: updated per-frame by ShuffleContent
 	const bgDimRef = useRef(1.0);
 
-	// セグメントがまだロードされていなければ何も描画しない
-	if (segments.length === 0) return null;
+	// テーマアセットがまだロードされていなければ何も描画しない
+	if (!themeAssets) return null;
 
 	return (
 		<>
-			<KimonoBackground texture={kimonoTexture} opacity={gui.bgOpacity} bgDimRef={bgDimRef} />
-			{atlasTexture && (
-				<ShuffleContent
-					segments={segments}
-					originalSegments={originalSegments}
-					atlasTexture={atlasTexture}
-					othersAtlasTexture={othersAtlasTexture}
-					config={config}
-					resetTrigger={gui.resetTrigger}
-					debugControls={gui.debugControls}
-					swipeEffect={gui.swipeEffect}
-					bgDimRef={bgDimRef}
-				/>
-			)}
+			<KimonoBackground texture={themeAssets.kimonoTexture} opacity={gui.bgOpacity} bgDimRef={bgDimRef} />
+			<ShuffleContent
+				key={themeAssets.theme.id}
+				segments={themeAssets.segments}
+				originalSegments={themeAssets.originalSegments}
+				atlasTexture={themeAssets.atlasTexture}
+				othersAtlasTexture={themeAssets.othersAtlasTexture}
+				config={config}
+				resetTrigger={gui.resetTrigger}
+				debugControls={gui.debugControls}
+				swipeEffect={gui.swipeEffect}
+				bgDimRef={bgDimRef}
+				onCycleComplete={onCycleComplete}
+				statusRef={statusRef}
+			/>
 		</>
+	);
+}
+
+// ─── Status Panel (HTML outside Canvas) ─────────────────────────────────────
+
+const INITIAL_STATUS: SceneStatus = {
+	themeId: "",
+	themeName: "",
+	themeIndex: 0,
+	themeCount: AVAILABLE_THEMES.length,
+	phase: "loading",
+	currentLayer: 0,
+	maxLayers: DEFAULT_CONFIG.maxGenerations,
+	phaseTime: 0,
+	segmentCount: 0,
+	loading: true,
+	activeSwaps: [],
+	slotMapping: [],
+	usingOthers: false,
+	othersSegIndices: new Set(),
+};
+
+const PHASE_LABELS: Record<string, string> = {
+	flash: "Flash",
+	swipe: "Swipe",
+	hold: "Hold",
+	preCollapse: "Pre-Collapse",
+	collapsing: "Collapsing",
+	holding: "Holding",
+	idle: "Idle",
+	loading: "Loading...",
+};
+
+/**
+ * HTML status panel that reads from a mutable ref via rAF (no React re-renders).
+ * Displays current theme, phase, layer progress, and segment count.
+ */
+function StatusPanel({ statusRef }: { statusRef: React.RefObject<SceneStatus> }) {
+	const containerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		let rafId: number;
+
+		function tick() {
+			const el = containerRef.current;
+			if (!el) {
+				rafId = requestAnimationFrame(tick);
+				return;
+			}
+			const s = statusRef.current;
+			const themeLabel = s.themeName ? `${s.themeName} (${s.themeId})` : "---";
+			const seqLabel = s.themeCount > 0
+				? `${s.themeIndex + 1} / ${s.themeCount}`
+				: "---";
+			const phaseLabel = s.loading ? "Loading..." : (PHASE_LABELS[s.phase] ?? s.phase);
+			const layerLabel = s.loading ? "---" : `${s.currentLayer} / ${s.maxLayers}`;
+			const timeLabel = s.loading ? "---" : s.phaseTime.toFixed(2);
+
+			// Atlas source label
+			const atlasLabel = s.usingOthers ? "others" : "base";
+
+			// Active swaps: show slot pairs
+			const swapsLabel = s.activeSwaps.length > 0
+				? s.activeSwaps.map(([a, b]) => `[${a}↔${b}]`).join(" ")
+				: "---";
+
+			// Slot mapping: only show entries where slot !== segId.
+			// Color-code by atlas: others segments in orange, base in blue.
+			const changedSlots = s.slotMapping
+				.map((segId, slot) => {
+					if (slot === segId) return null;
+					const isOthers = s.usingOthers && s.othersSegIndices.has(segId);
+					const color = isOthers ? "#e8a" : "#8ae";
+					return `<span style="color:${color}">${slot}→${segId}${isOthers ? "*" : ""}</span>`;
+				})
+				.filter(Boolean);
+			const mappingLabel = changedSlots.length > 0
+				? changedSlots.join("&nbsp; ")
+				: "---";
+
+			el.innerHTML =
+				`<div style="margin-bottom:12px;font-size:14px;color:#888;letter-spacing:0.05em">SCENE STATUS</div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Theme:</span> <span style="color:#fff">${themeLabel}</span></div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Sequence:</span> <span style="color:#fff">${seqLabel}</span></div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Phase:</span> <span style="color:#fff">${phaseLabel}</span></div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Layer:</span> <span style="color:#fff">${layerLabel}</span></div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Phase Time:</span> <span style="color:#fff">${timeLabel}s</span></div>` +
+				`<div style="margin-bottom:10px"><span style="color:#888">Segments:</span> <span style="color:#fff">${s.segmentCount}</span></div>` +
+				`<div style="margin-bottom:12px;font-size:14px;color:#888;letter-spacing:0.05em">ACTIVE LAYER</div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Atlas:</span> <span style="color:${s.usingOthers ? "#e8a" : "#8ae"}">${atlasLabel}</span></div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Swaps (slot):</span> <span style="color:#e8a">${swapsLabel}</span></div>` +
+				`<div style="margin-bottom:6px;word-break:break-all"><span style="color:#888">Slot→Seg:</span> <span style="font-size:11px">${mappingLabel}</span></div>`;
+
+			rafId = requestAnimationFrame(tick);
+		}
+
+		rafId = requestAnimationFrame(tick);
+		return () => cancelAnimationFrame(rafId);
+	}, [statusRef]);
+
+	return (
+		<div
+			ref={containerRef}
+			style={{
+				position: "absolute",
+				top: 16,
+				left: 528,
+				padding: "16px",
+				fontFamily: "monospace",
+				fontSize: "13px",
+				color: "#ccc",
+				lineHeight: 1.6,
+				userSelect: "none",
+				pointerEvents: "none",
+			}}
+		/>
 	);
 }
 
 // ─── App ────────────────────────────────────────────────────────────────────
 
-/**
- * ルートコンポーネント。画面全体に Three.js Canvas を配置する。
- *
- * - orthographic カメラ: 遠近感なしの正射影（2D 的な見た目）
- * - zoom=250: 着物のサイズ（約 2〜3 単位）を画面に収まるスケールに拡大
- * - Y_CENTER_OFFSET: 着物の中心が画面中央に来るよう Y 方向にオフセット
- * - OrbitControls: マウスでカメラ回転・ズーム可能（デバッグ用）
- * - 背景色は黒
- */
 function App() {
 	const [guiVisible, setGuiVisible] = useState(false);
+	const statusRef = useRef<SceneStatus>({ ...INITIAL_STATUS });
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -665,9 +975,10 @@ function App() {
 				>
 					<color attach="background" args={["black"]} />
 					<OrbitControls />
-					<Scene />
+					<Scene statusRef={statusRef} />
 				</Canvas>
 			</div>
+			<StatusPanel statusRef={statusRef} />
 		</div>
 	);
 }
