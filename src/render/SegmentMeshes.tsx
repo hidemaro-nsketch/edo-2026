@@ -130,6 +130,10 @@ export function SegmentMeshes({
 		data.getSegmentsForLayer = getSegmentsForLayer;
 		data.dimFactor = currentDimRef.current;
 
+		// Fade out during holding phase
+		const fadeProgress = buildSystem.getFadeOutProgress();
+		data.activeOpacity = fadeProgress > 0 ? 1 - fadeProgress : 1;
+
 		return data;
 	}, [
 		buildSystem,

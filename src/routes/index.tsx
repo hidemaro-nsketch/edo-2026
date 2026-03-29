@@ -624,13 +624,11 @@ function CameraAndLifecycle({
 		}
 
 		// 現在レイヤーを ref 経由で CameraRig に伝達（setState を避けてパフォーマンス維持）
-		// カメラの斜め移行は preCollapse 以降のみ。swipe/hold 中は maxGenerations 未満に抑える
-		const { currentLayer } = buildSystem.state;
-		const isPostComplete =
-			phase === "preCollapse" || phase === "collapsing" || phase === "holding";
-		currentLayerRef.current = isPostComplete
-			? currentLayer
-			: Math.min(currentLayer, config.maxGenerations - 1);
+		// Collapse disabled: カメラは常に top-down を維持（oblique 遷移しない）
+		currentLayerRef.current = Math.min(
+			buildSystem.state.currentLayer,
+			config.maxGenerations - 1,
+		);
 	});
 
 	return (

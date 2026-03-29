@@ -498,6 +498,8 @@ export type FrameRenderData = {
 	getSegmentsForLayer: (layer: number) => SegmentInfo[];
 	/** Dim factor for non-active meshes */
 	dimFactor: number;
+	/** Global opacity for active instances (0..1, used for fade-out) */
+	activeOpacity?: number;
 };
 
 type SegmentMeshRendererProps = {
@@ -584,7 +586,17 @@ export function SegmentMeshRenderer({
 			camera,
 			viewDirRef.current,
 		);
-		writeInstances(activeGeo, sortedActive, data.activeSegments);
+		const activeOp = data.activeOpacity ?? 1;
+		let activeOpacityMap: Map<number, number> | undefined;
+		if (activeOp < 1) {
+			activeOpacityMap = new Map();
+			for (const inst of sortedActive) {
+				activeOpacityMap.set(inst.segId, activeOp);
+			}
+		}
+		writeInstances(activeGeo, sortedActive, data.activeSegments, {
+			opacityOverride: activeOpacityMap,
+		});
 
 		// Group active black fills by sourceLayer
 		const activeBfByLayer = new Map<number, BlackFillRenderInstance[]>();
@@ -606,9 +618,17 @@ export function SegmentMeshRenderer({
 					? [...layer0BlackFills, ...activeBf0]
 					: activeBf0;
 			}
+			let baseOpacityMap: Map<number, number> | undefined;
+			if (activeOp < 1) {
+				baseOpacityMap = new Map();
+				for (const inst of data.baseInstances) {
+					baseOpacityMap.set(inst.segId, activeOp);
+				}
+			}
 			writeInstances(baseGeo, data.baseInstances, data.baseSegments, {
 				blackFills: layer0BlackFills,
 				dimFactor: data.dimFactor,
+				opacityOverride: baseOpacityMap,
 			});
 		}
 
