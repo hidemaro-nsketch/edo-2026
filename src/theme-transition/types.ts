@@ -38,6 +38,10 @@ export type TransitionConfig = {
 	bgFragmentCount: number;
 	/** How much individual directions deviate from unified direction (0=identical, 1=full spread) */
 	directionSpread: number;
+	/** Max stagger spread for scatter-out (0..1 of phase duration) */
+	staggerOutDuration: number;
+	/** Max stagger spread for gather-in (0..1 of phase duration) */
+	staggerInDuration: number;
 };
 
 /** Per-segment state during a transition */
@@ -84,9 +88,9 @@ export type BackgroundTransitionState = {
 
 /** Default transition configuration */
 export const DEFAULT_TRANSITION_CONFIG: TransitionConfig = {
-	scatterDuration: 1.5,
-	blackoutDuration: 0.5,
-	gatherDuration: 1.8,
+	scatterDuration: 2.5,
+	blackoutDuration: 2.5,
+	gatherDuration: 3.8,
 	staggerWeights: {
 		edge: 0.6,
 		noise: 0.25,
@@ -95,4 +99,6 @@ export const DEFAULT_TRANSITION_CONFIG: TransitionConfig = {
 	noiseSeed: 42,
 	bgFragmentCount: 20,
 	directionSpread: 0.15,
+	staggerOutDuration: 0.8,
+	staggerInDuration: 0.8,
 };

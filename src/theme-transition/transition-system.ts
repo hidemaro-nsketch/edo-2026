@@ -585,7 +585,7 @@ export class ThemeTransitionSystem {
 
 			return {
 				segId: i,
-				startDelay: priority * 0.5,
+				startDelay: priority * this.config.staggerOutDuration,
 				exitDirection: varyDirection(
 					this.unifiedDirection,
 					rng,
@@ -640,7 +640,7 @@ export class ThemeTransitionSystem {
 
 			return {
 				segId: i,
-				startDelay: priority * 0.5,
+				startDelay: priority * this.config.staggerInDuration,
 				exitDirection: varyDirection(
 					gatherDir,
 					rng,
