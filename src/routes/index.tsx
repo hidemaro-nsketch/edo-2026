@@ -467,7 +467,7 @@ function useDebugGui(): DebugGuiResult {
 		noiseFreq: { value: 15.0, min: 1, max: 50, step: 0.5 },
 		noiseAmp: { value: 0.08, min: 0, max: 0.3, step: 0.005 },
 		noiseSpeed: { value: 8.0, min: 0, max: 20, step: 0.5 },
-		dimFactor: { value: 0.3, min: 0, max: 1, step: 0.05 },
+		dimFactor: { value: 0.6, min: 0, max: 1, step: 0.05 },
 	});
 
 	// ── Playback: 速度倍率スライダー ──

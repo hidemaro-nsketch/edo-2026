@@ -103,7 +103,7 @@ export function SegmentMeshes({
 			phase === "dimming" ||
 			(phase === "hold" &&
 				buildSystem.state.phaseTime < buildSystem.config.dimHoldTime);
-		const dimTarget = stayDim ? (swipeEffect?.dimFactor ?? 0.3) : 1.0;
+		const dimTarget = stayDim ? (swipeEffect?.dimFactor ?? 0.6) : 1.0;
 		const isDimming = dimTarget < currentDimRef.current;
 		const dimDuration = isDimming
 			? buildSystem.config.dimFadeInDuration
