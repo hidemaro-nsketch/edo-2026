@@ -203,6 +203,11 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
 		"花鳥雛形-107_s01_str0.400_seed43": 4,
 	},
 	contentStartLayer: 5,
-	categoryMaxLayer: {},
+	categoryMaxLayer: {
+		"sakura": 10,
+		"fuji": 3,
+		"momiji": 5,
+		"ume": 6
+	},
 	categoryContentStartLayer: {},
 };

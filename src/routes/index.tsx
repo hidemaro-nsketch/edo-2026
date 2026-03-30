@@ -24,7 +24,7 @@ import type * as THREE from "three";
 import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system"; // シャッフルアニメーションの状態管理エンジン
 import { compilePlan } from "../layered-shuffle/compiled-plan"; // セグメント＋設定 → 実行プランへ変換
-import { DEFAULT_CONFIG, getEffectiveMaxLayer, type ShuffleConfig } from "../layered-shuffle/types";
+import { type BlackFillRenderInstance, DEFAULT_CONFIG, getEffectiveMaxLayer, type ShuffleConfig } from "../layered-shuffle/types";
 import { CameraRig, Y_CENTER_OFFSET } from "../render/CameraRig"; // レイヤー追従カメラ
 import { ConnectionLines } from "../render/ConnectionLines"; // セグメント間の接続線描画
 import { SegmentMeshes, type SwipeEffectParams } from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
@@ -562,6 +562,11 @@ function ShuffleContent({
 	const createNextPlan = () => {
 		const plan = compilePlan(segments, config, nextPlanSeedRef.current);
 		nextPlanSeedRef.current += 1;
+		// Clamp plan.maxLayer to the current theme's categoryMaxLayer (if set)
+		const themeCat = segments[0]?.categoryName;
+		if (themeCat && config.categoryMaxLayer[themeCat] != null) {
+			plan.maxLayer = config.categoryMaxLayer[themeCat];
+		}
 		return plan;
 	};
 
@@ -771,6 +776,7 @@ function Scene({
 	const transitionAbortRef = useRef<AbortController | null>(null);
 	const shuffleFrozenRef = useRef(false);
 	const transitionCountRef = useRef(0);
+	const frozenBlackFillsRef = useRef<BlackFillRenderInstance[]>([]);
 	const { gl } = useThree();
 	const gui = useDebugGui();
 
@@ -875,6 +881,21 @@ function Scene({
 		};
 		const finalDisplayInstances = buildSystem.getFinalDisplayInstances();
 
+		// Capture black fills before transitioning — flatten all layers to layer 0
+		// so TransitionRenderer (layerCount=0) can render them in the base mesh.
+		const committedBf = buildSystem.getCommittedBlackFills();
+		const activeBf = buildSystem.getBlackFillInstances();
+		const allBlackFills: BlackFillRenderInstance[] = [];
+		for (const fills of committedBf.values()) {
+			for (const bf of fills) {
+				allBlackFills.push({ ...bf, sourceLayer: 0 });
+			}
+		}
+		for (const bf of activeBf) {
+			allBlackFills.push({ ...bf, sourceLayer: 0 });
+		}
+		frozenBlackFillsRef.current = allBlackFills;
+
 		const system = new ThemeTransitionSystem(
 			curAssets.originalSegments,
 			transitionConfig,
@@ -966,8 +987,10 @@ function Scene({
 		],
 	);
 
-	// Keep maxLayers in sync with GUI
-	statusRef.current.maxLayers = getEffectiveMaxLayer(config);
+	// Keep maxLayers in sync with GUI (per-theme category max)
+	const currentThemeId = statusRef.current.themeId;
+	statusRef.current.maxLayers =
+		config.categoryMaxLayer[currentThemeId] ?? config.maxGenerations;
 
 	// Background dim factor: updated per-frame by ShuffleContent
 	const bgDimRef = useRef(1.0);
@@ -1012,6 +1035,7 @@ function Scene({
 					nextAssetsRef={nextAssetsRef}
 					swipeEffect={gui.swipeEffect}
 					bgOpacity={gui.bgOpacity}
+					frozenBlackFills={frozenBlackFillsRef.current}
 					onTransitionComplete={() => {
 						const next = nextAssetsRef.current;
 						if (next) {
@@ -1027,6 +1051,7 @@ function Scene({
 						nextAssetsRef.current = null;
 						transitionSystemRef.current = null;
 						shuffleFrozenRef.current = false;
+						frozenBlackFillsRef.current = [];
 						setTransitionPhase(null);
 					}}
 				/>
@@ -1047,6 +1072,7 @@ function TransitionOverlay({
 	nextAssetsRef,
 	swipeEffect,
 	bgOpacity,
+	frozenBlackFills,
 	onTransitionComplete,
 }: {
 	transitionSystem: ThemeTransitionSystem;
@@ -1054,6 +1080,7 @@ function TransitionOverlay({
 	nextAssetsRef: React.RefObject<ThemeAssets | null>;
 	swipeEffect: SwipeEffectParams;
 	bgOpacity: number;
+	frozenBlackFills: BlackFillRenderInstance[];
 	onTransitionComplete: () => void;
 }) {
 	const completedRef = useRef(false);
@@ -1091,6 +1118,7 @@ function TransitionOverlay({
 			oldBgTexture={currentAssets.kimonoTexture}
 			newBgTexture={newBgTexture}
 			bgOpacity={bgOpacity}
+			frozenBlackFills={frozenBlackFills}
 		/>
 	);
 }

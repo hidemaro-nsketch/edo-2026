@@ -20,7 +20,7 @@ import {
 	MeshBasicMaterial,
 	type Texture,
 } from "three";
-import type { SegmentRenderInstance } from "../layered-shuffle/types";
+import type { BlackFillRenderInstance, SegmentRenderInstance } from "../layered-shuffle/types";
 import type { SegmentInfo } from "../sakura/types";
 import type { ThemeTransitionSystem } from "../theme-transition/transition-system";
 import type { VoronoiFragment } from "../theme-transition/voronoi-fragments";
@@ -44,6 +44,7 @@ type TransitionRendererProps = {
 	oldBgTexture?: Texture | null;
 	newBgTexture?: Texture | null;
 	bgOpacity?: number;
+	frozenBlackFills?: BlackFillRenderInstance[];
 };
 
 // ─── Voronoi Background Fragment Meshes ─────────────────────────────────────
@@ -160,6 +161,7 @@ export function TransitionRenderer({
 	oldBgTexture,
 	newBgTexture,
 	bgOpacity = 1,
+	frozenBlackFills,
 }: TransitionRendererProps) {
 	const phase = useRef(transitionSystem.getPhase());
 
@@ -173,13 +175,22 @@ export function TransitionRenderer({
 			? newOthersAtlasTexture
 			: oldOthersAtlasTexture;
 
+	const bfCount = frozenBlackFills?.length ?? 0;
 	const maxSegments = Math.max(
 		oldOriginalSegments.length,
 		newOriginalSegments.length,
+		// Ensure base mesh buffer can hold all frozen black fills
+		Math.ceil(bfCount / 2),
 		1,
 	);
 
-	const emptyBlackFills = useMemo(() => new Map<number, never[]>(), []);
+	const emptyBlackFills = useMemo(() => new Map<number, BlackFillRenderInstance[]>(), []);
+	const frozenBlackFillMap = useMemo(() => {
+		if (!frozenBlackFills || frozenBlackFills.length === 0) return emptyBlackFills;
+		const map = new Map<number, BlackFillRenderInstance[]>();
+		map.set(0, frozenBlackFills);
+		return map;
+	}, [frozenBlackFills, emptyBlackFills]);
 	const emptySettled = useMemo(
 		() => new Map<number, SegmentRenderInstance[]>(),
 		[],
@@ -227,7 +238,8 @@ export function TransitionRenderer({
 		data.baseSegments = baseSegments;
 		data.settledByLayer = emptySettled;
 		data.activeBlackFills = emptyBlackFillArray;
-		data.committedBlackFills = emptyBlackFills;
+		data.committedBlackFills =
+			phase === "scatter-out" ? frozenBlackFillMap : emptyBlackFills;
 		data.currentLayer = 0;
 		data.getSegmentsForLayer = () => othersSegments;
 		data.dimFactor = 1.0;
@@ -238,6 +250,7 @@ export function TransitionRenderer({
 		emptySettled,
 		emptyBlackFillArray,
 		emptyBlackFills,
+		frozenBlackFillMap,
 		oldOriginalSegments,
 		oldMergedSegments,
 		newOriginalSegments,
