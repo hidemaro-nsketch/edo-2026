@@ -50,6 +50,10 @@ export type ShuffleConfig = {
 	/** Minimum layer at which "others" atlas content is used for rendering.
 	 *  Layers below this threshold render with the original (layout) atlas. */
 	contentStartLayer: number;
+	/** Per-category maximum layer count. Categories not listed fall back to maxGenerations. */
+	categoryMaxLayer: Record<string, number>;
+	/** Per-category content start layer. Categories not listed fall back to contentStartLayer. */
+	categoryContentStartLayer: Record<string, number>;
 };
 
 /** A pair of slot indices to swap */
@@ -139,6 +143,8 @@ export type CompiledPlan = {
 	mappingByLayer: number[][];
 	/** Slots vacated by swaps at each layer (black fill targets) */
 	vacatedByLayer: VacatedSlot[][];
+	/** Effective maximum layer (max of maxGenerations and all categoryMaxLayer values) */
+	maxLayer: number;
 };
 
 /** Phase of the build state machine */
@@ -163,6 +169,17 @@ export type BuildState = {
 	phaseTime: number;
 };
 
+/**
+ * Compute the effective maximum layer across all categories.
+ * This is `max(maxGenerations, ...Object.values(categoryMaxLayer))`.
+ * Used as the loop upper bound for plan compilation and runtime iteration.
+ */
+export function getEffectiveMaxLayer(config: ShuffleConfig): number {
+	const categoryValues = Object.values(config.categoryMaxLayer);
+	if (categoryValues.length === 0) return config.maxGenerations;
+	return Math.max(config.maxGenerations, ...categoryValues);
+}
+
 /** Default configuration values */
 export const DEFAULT_CONFIG: ShuffleConfig = {
 	maxGenerations: 10,
@@ -186,4 +203,11 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
 		"花鳥雛形-107_s01_str0.400_seed43": 4,
 	},
 	contentStartLayer: 5,
+	categoryMaxLayer: {
+		"sakura": 10,
+		"fuji": 3,
+		"momiji": 5,
+		"ume": 6
+	},
+	categoryContentStartLayer: {},
 };

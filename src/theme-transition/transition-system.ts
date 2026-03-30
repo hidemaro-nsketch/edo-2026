@@ -64,33 +64,7 @@ function seededRandom(seed: number): () => number {
 	};
 }
 
-// ─── Helper: Pick exit direction per theme ──────────────────────────────────
-
-/** Fixed scatter/gather direction per theme content */
-const THEME_DIRECTIONS: Record<string, [number, number]> = {
-	fuji: [0, 1], // 藤 → 上 (up)
-	momiji: [1, 0], // 紅葉 → 右 (right)
-	sakura: [-1, 0], // サクラ → 左 (left)
-	ume: [0, -1], // 梅 → 下 (down)
-};
-
-/** Cardinal directions fallback */
-const DIRECTIONS: Array<[number, number]> = [
-	[-1, 0], // left
-	[1, 0], // right
-	[0, -1], // down
-	[0, 1], // up
-];
-
-function pickDirectionForTheme(
-	themeId: string,
-	seed: number,
-): [number, number] {
-	const dir = THEME_DIRECTIONS[themeId];
-	if (dir) return dir;
-	const idx = Math.abs(seed) % DIRECTIONS.length;
-	return DIRECTIONS[idx];
-}
+// ─── Direction constants ────────────────────────────────────────────────────
 
 /**
  * Apply small per-element variation to a unified direction.
@@ -202,14 +176,9 @@ export class ThemeTransitionSystem {
 		oldDisplayInstances?: SegmentRenderInstance[],
 	) {
 		this.config = { ...DEFAULT_TRANSITION_CONFIG, ...config };
-		this.scatterDirection = pickDirectionForTheme(
-			this.config.oldThemeId,
-			this.config.noiseSeed,
-		);
-		this.gatherDirection = pickDirectionForTheme(
-			this.config.newThemeId,
-			this.config.noiseSeed,
-		);
+		// scatter-out: always down / gather-in: always from above
+		this.scatterDirection = [0, -1];
+		this.gatherDirection = [0, 1];
 		this.oldSegments = oldSegments;
 		this.oldBasePositions = oldDisplayInstances?.length
 			? this.computePositionsFromInstances(oldDisplayInstances)

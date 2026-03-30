@@ -15,13 +15,14 @@
 
 import { getSlotWorldPos, getSlotWorldSize } from "../sakura/constants";
 import type { SegmentInfo } from "../sakura/types";
-import type {
-	CompiledPlan,
-	SegmentLeg,
-	SegmentLifecycle,
-	ShuffleConfig,
-	SwapPair,
-	VacatedSlot,
+import {
+	getEffectiveMaxLayer,
+	type CompiledPlan,
+	type SegmentLeg,
+	type SegmentLifecycle,
+	type ShuffleConfig,
+	type SwapPair,
+	type VacatedSlot,
 } from "./types";
 
 // ─── Seeded PRNG (mulberry32) ────────────────────────────────────────────────
@@ -93,6 +94,8 @@ function generateSwapPairs(
 	segments: SegmentInfo[],
 	categoryStartLayer: Record<string, number>,
 	sourceImageStartLayer: Record<string, number>,
+	categoryMaxLayer: Record<string, number>,
+	maxGenerations: number,
 	random: () => number = Math.random,
 ): SwapPair[] {
 	const SWAPS_PER_CATEGORY = 2;
@@ -105,6 +108,10 @@ function generateSwapPairs(
 		const catName = segments[slots[0]].categoryName;
 		const startLayer = categoryStartLayer[catName] ?? 1;
 		if (gen < startLayer) continue;
+
+		// Skip if this category has exceeded its max layer
+		const catMaxLayer = categoryMaxLayer[catName] ?? maxGenerations;
+		if (gen > catMaxLayer) continue;
 
 		// Filter slots by sourceImageStartLayer: exclude segments whose
 		// sourceImageId hasn't started participating yet at this layer
@@ -154,7 +161,7 @@ export function compilePlan(
 	seed?: number,
 ): CompiledPlan {
 	const count = segments.length;
-	const maxGen = config.maxGenerations;
+	const maxGen = getEffectiveMaxLayer(config);
 	const random = seed != null ? mulberry32(seed) : Math.random;
 
 	// ── Step 1: Generate swap pairs for each layer ──
@@ -167,6 +174,8 @@ export function compilePlan(
 				segments,
 				config.categoryStartLayer,
 				config.sourceImageStartLayer,
+				config.categoryMaxLayer,
+				config.maxGenerations,
 				random,
 			),
 		);
@@ -319,5 +328,6 @@ export function compilePlan(
 		swapsByLayer,
 		mappingByLayer,
 		vacatedByLayer,
+		maxLayer: maxGen,
 	};
 }

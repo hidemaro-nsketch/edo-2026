@@ -163,7 +163,7 @@ export class BuildSystem {
 	}
 
 	private commitLayer(): void {
-		if (this.state.currentLayer >= this.config.maxGenerations) {
+		if (this.state.currentLayer >= this.plan.maxLayer) {
 			// Keep the final stack visible and let the parent trigger the next scene phase.
 			this.state.phase = "complete";
 			this.state.phaseTime = 0;
@@ -297,7 +297,7 @@ export class BuildSystem {
 		// Holding phase: return all settled instances (opacity handled externally via getFadeOutProgress)
 		if (phase === "holding") {
 			const instances: SegmentRenderInstance[] = [];
-			for (let layer = 1; layer <= this.config.maxGenerations; layer++) {
+			for (let layer = 1; layer <= this.plan.maxLayer; layer++) {
 				instances.push(
 					...buildSettledRenderInstancesForLayer(
 						this.plan,
@@ -357,6 +357,7 @@ export class BuildSystem {
 				this.plan,
 				this.config,
 				this.state.currentLayer,
+				this.originalSegments,
 			);
 		}
 		return [];
@@ -379,6 +380,7 @@ export class BuildSystem {
 				this.plan,
 				this.config,
 				layer,
+				this.originalSegments,
 			);
 			for (const fill of layerFills) {
 				if (fill.sourceLayer > maxSettledLayer) continue;
@@ -484,7 +486,7 @@ export class BuildSystem {
 			case "hold":
 				return this.state.currentLayer - 1;
 			case "complete":
-				return this.config.maxGenerations;
+				return this.plan.maxLayer;
 			// Collapse disabled: preCollapse no longer entered
 			// case "preCollapse":
 			// 	return this.config.maxGenerations;
