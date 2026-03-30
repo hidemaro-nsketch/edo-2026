@@ -142,6 +142,7 @@ export class ThemeTransitionSystem {
 
 	/** Base positions for old segments (where they start from) */
 	private oldBasePositions: Array<{
+		segId: number;
 		x: number;
 		y: number;
 		z: number;
@@ -151,6 +152,7 @@ export class ThemeTransitionSystem {
 	}> = [];
 	/** Base positions for new segments (where they land) */
 	private newBasePositions: Array<{
+		segId: number;
 		x: number;
 		y: number;
 		z: number;
@@ -365,7 +367,7 @@ export class ThemeTransitionSystem {
 		const exitDistance = KIMONO_SIZE * 1.5; // fly well off-screen
 
 		for (const state of this.scatterStates) {
-			const base = this.oldBasePositions[state.segId];
+			const base = this.oldBasePositions[state.index];
 			if (!base) continue;
 
 			// Staggered progress: each segment starts at its delay
@@ -415,7 +417,7 @@ export class ThemeTransitionSystem {
 					0,
 					Math.min(1, (progress - state.startDelay) / (1 - state.startDelay)),
 				);
-				map.set(state.segId, 1 - easeInQuad(segProgress));
+				map.set(state.index, 1 - easeInQuad(segProgress));
 			}
 		} else if (this.phase === "gather-in") {
 			const progress = Math.min(1, this.phaseTime / this.config.gatherDuration);
@@ -424,7 +426,7 @@ export class ThemeTransitionSystem {
 					0,
 					Math.min(1, (progress - state.startDelay) / (1 - state.startDelay)),
 				);
-				map.set(state.segId, smoothstep(segProgress));
+				map.set(state.index, smoothstep(segProgress));
 			}
 		}
 
@@ -437,7 +439,7 @@ export class ThemeTransitionSystem {
 		const entryDistance = KIMONO_SIZE * 1.5;
 
 		for (const state of this.gatherStates) {
-			const base = this.newBasePositions[state.segId];
+			const base = this.newBasePositions[state.index];
 			if (!base) continue;
 
 			// Staggered progress
@@ -534,6 +536,7 @@ export class ThemeTransitionSystem {
 	// ─── State Builders ──────────────────────────────────────────────────────
 
 	private computeBasePositions(segments: SegmentInfo[]): Array<{
+		segId: number;
 		x: number;
 		y: number;
 		z: number;
@@ -541,7 +544,7 @@ export class ThemeTransitionSystem {
 		h: number;
 		useOthersAtlas: number;
 	}> {
-		return segments.map((seg) => {
+		return segments.map((seg, i) => {
 			const cx =
 				(seg.bboxInSource[0] + seg.bboxInSource[2] * 0.5) / seg.originalSize[0];
 			const cy =
@@ -549,6 +552,7 @@ export class ThemeTransitionSystem {
 			const bboxW = seg.bboxInSource[2] / seg.originalSize[0];
 			const bboxH = seg.bboxInSource[3] / seg.originalSize[1];
 			return {
+				segId: i,
 				x: (cx - 0.5) * KIMONO_SIZE,
 				y: -(cy - 0.5) * KIMONO_SIZE,
 				z: 0,
@@ -562,6 +566,7 @@ export class ThemeTransitionSystem {
 	private computePositionsFromInstances(
 		instances: SegmentRenderInstance[],
 	): Array<{
+		segId: number;
 		x: number;
 		y: number;
 		z: number;
@@ -569,27 +574,15 @@ export class ThemeTransitionSystem {
 		h: number;
 		useOthersAtlas: number;
 	}> {
-		const positions: Array<{
-			x: number;
-			y: number;
-			z: number;
-			w: number;
-			h: number;
-			useOthersAtlas: number;
-		}> = [];
-
-		for (const inst of instances) {
-			positions[inst.segId] = {
-				x: inst.x,
-				y: inst.y,
-				z: inst.z,
-				w: inst.w,
-				h: inst.h,
-				useOthersAtlas: inst.useOthersAtlas,
-			};
-		}
-
-		return positions;
+		return instances.map((inst) => ({
+			segId: inst.segId,
+			x: inst.x,
+			y: inst.y,
+			z: inst.z,
+			w: inst.w,
+			h: inst.h,
+			useOthersAtlas: inst.useOthersAtlas,
+		}));
 	}
 
 	private buildScatterStates(
@@ -621,7 +614,8 @@ export class ThemeTransitionSystem {
 				(1 - normalizedProj) * edge + noiseVal * noise + normalizedArea * area;
 
 			return {
-				segId: i,
+				index: i,
+				segId: pos.segId,
 				startDelay: priority * this.config.staggerOutDuration,
 				exitDirection: varyDirection(
 					this.scatterDirection,
@@ -675,6 +669,7 @@ export class ThemeTransitionSystem {
 			const priority = categoryDelay * 0.7 + noiseVal * 0.3;
 
 			return {
+				index: i,
 				segId: i,
 				startDelay: priority * this.config.staggerInDuration,
 				exitDirection: varyDirection(

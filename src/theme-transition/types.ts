@@ -50,7 +50,9 @@ export type TransitionConfig = {
 
 /** Per-segment state during a transition */
 export type SegmentTransitionState = {
-	/** Segment index */
+	/** Stable transition-state index */
+	index: number;
+	/** Actual segment ID used for atlas lookup/rendering */
 	segId: number;
 	/** Stagger start delay (0..1 normalized within phase duration) */
 	startDelay: number;

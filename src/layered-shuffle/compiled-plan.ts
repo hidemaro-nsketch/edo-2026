@@ -55,6 +55,19 @@ function groupSlotsByCategory(segments: SegmentInfo[]): Map<string, number[]> {
 	return groups;
 }
 
+function isOthersAtlasLayer(
+	config: ShuffleConfig,
+	groupKey: string,
+	layer: number,
+): boolean {
+	if (groupKey === DEFAULT_GROUP_KEY) {
+		return layer >= config.contentStartLayer;
+	}
+	const contentStartLayer =
+		config.categoryContentStartLayer[groupKey] ?? config.contentStartLayer;
+	return layer >= contentStartLayer;
+}
+
 function buildChangedSlotsByLayer(
 	mergedSegments: SegmentInfo[],
 	config: ShuffleConfig,
@@ -76,8 +89,7 @@ function buildChangedSlotsByLayer(
 			const maxLayer = config.categoryMaxLayer[catName] ?? maxGenerations;
 			if (layer > maxLayer) continue;
 
-			const changeCount = getCategoryChangeSlotCount(config, catName);
-			if (changeCount <= 0) continue;
+			const isOthersLayer = isOthersAtlasLayer(config, catName, layer);
 
 			const eligibleSlots = slots.filter((slot) => {
 				const srcId = mergedSegments[slot].sourceImageId;
@@ -85,6 +97,11 @@ function buildChangedSlotsByLayer(
 				return layer >= srcStart;
 			});
 			if (eligibleSlots.length === 0) continue;
+
+			const changeCount = isOthersLayer
+				? Math.max(1, Math.floor(random() * eligibleSlots.length) + 1)
+				: getCategoryChangeSlotCount(config, catName);
+			if (changeCount <= 0) continue;
 
 			shuffleInPlace(eligibleSlots, random);
 			const picked = eligibleSlots.slice(
