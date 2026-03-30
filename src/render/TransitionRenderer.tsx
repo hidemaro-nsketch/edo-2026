@@ -13,7 +13,7 @@
  */
 
 import { useFrame } from "@react-three/fiber";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	type BufferGeometry,
 	Mesh,
@@ -163,15 +163,15 @@ export function TransitionRenderer({
 	bgOpacity = 1,
 	frozenBlackFills,
 }: TransitionRendererProps) {
-	const phase = useRef(transitionSystem.getPhase());
+	const [phase, setPhase] = useState(transitionSystem.getPhase());
 
 	const atlasTexture =
-		phase.current === "gather-in" && newAtlasTexture
+		phase === "gather-in" && newAtlasTexture
 			? newAtlasTexture
 			: oldAtlasTexture;
 
 	const othersAtlasTexture =
-		phase.current === "gather-in" && newOthersAtlasTexture
+		phase === "gather-in" && newOthersAtlasTexture
 			? newOthersAtlasTexture
 			: oldOthersAtlasTexture;
 
@@ -211,7 +211,8 @@ export function TransitionRenderer({
 	});
 
 	useFrame(() => {
-		phase.current = transitionSystem.getPhase();
+		const currentPhase = transitionSystem.getPhase();
+		setPhase((prev) => (prev !== currentPhase ? currentPhase : prev));
 	});
 
 	const getRenderData = useCallback((): FrameRenderData => {
