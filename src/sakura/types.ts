@@ -30,6 +30,8 @@ export type SegmentInfo = {
 	pivot: [number, number];
 	/** [x, y, width, height] bounding box in the original source image */
 	bboxInSource: [number, number, number, number];
+	/** Optional label used for filtering segments by theme config */
+	label?: string;
 };
 
 export type SegmentManifest = {
