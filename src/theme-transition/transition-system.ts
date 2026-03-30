@@ -204,9 +204,15 @@ export class ThemeTransitionSystem {
 			this.config.directionSpread,
 		);
 		const bgGatherRng = seededRandom(this.config.noiseSeed + 600);
+		// Negate gatherDirection to match segment convention:
+		// buildGatherStates negates it, and the animation code negates exitDirection again
+		const bgGatherDir: [number, number] = [
+			-this.gatherDirection[0],
+			-this.gatherDirection[1],
+		];
 		this.bgGatherFragmentStates = buildFragmentStates(
 			this.bgFragments,
-			this.gatherDirection,
+			bgGatherDir,
 			bgGatherRng,
 			this.config.directionSpread,
 		);
