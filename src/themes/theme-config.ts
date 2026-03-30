@@ -9,6 +9,14 @@
  *   ThemeSequence → Scene (index.tsx) → loadManifest / loadAtlasTextures
  */
 
+/** Segment label filters per category */
+export type SegmentLabelFilter = {
+	/** Labels to include from the layout manifest (null = use all) */
+	layout: string[] | null;
+	/** Labels to include from the content manifest (null = use all) */
+	content: string[] | null;
+};
+
 /** A single theme's asset paths and display metadata */
 export type ThemeConfig = {
 	/** Unique identifier for the theme */
@@ -23,6 +31,8 @@ export type ThemeConfig = {
 	backgroundPath: string;
 	/** Whether the theme's assets are available (false = placeholder for future) */
 	available: boolean;
+	/** Segment label filters — which labels to use per category */
+	segmentLabels: SegmentLabelFilter;
 };
 
 /**
@@ -37,6 +47,10 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		contentBasePath: "/sakurabackground",
 		backgroundPath: "/sakura/kimono_bg_inv.jpg",
 		available: true,
+		segmentLabels: {
+			layout: ["sakura"],
+			content: ["sakura"]
+		},
 	},
 	{
 		id: "ume",
@@ -45,6 +59,10 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		contentBasePath: "/umebackground",
 		backgroundPath: "/ume/output-2a-2x-inv-refine.png",
 		available: true,
+		segmentLabels: {
+			layout: ["ume"],
+			content: ["ume"],
+		},
 	},
 	{
 		id: "fuji",
@@ -53,6 +71,10 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		contentBasePath: "/fujibackground",
 		backgroundPath: "/fuji/output-2-2x-inv.png",
 		available: true,
+		segmentLabels: {
+			layout: ["fuji", "eda"],
+			content: ["fuji"],
+		},
 	},
 	{
 		id: "momiji",
@@ -61,6 +83,10 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		contentBasePath: "/momijibackground",
 		backgroundPath: "/momiji/output-3-2x-inv.png",
 		available: true,
+		segmentLabels: {
+			layout: ["momiji(white)", "momiji(black)"],
+			content: ["momiji"],
+		},
 	},
 ];
 
