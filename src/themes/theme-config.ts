@@ -100,22 +100,22 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		},
 	},
 
-	// {
-	// 	id: "fuji",
-	// 	displayName: "藤",
-	// 	layoutBasePath: "/fuji",
-	// 	contentBasePath: "/fujibackground",
-	// 	backgroundPath: "/fuji/output-2-2x-inv-vec.png",
-	// 	available: true,
-	// 	segmentLabels: {
-	// 		layout: ["fuji"],
-	// 		content: ["fuji"],
-	// 	},
-	// 	blackFillScale: {
-	// 		layout: 1.3,
-	// 		content: 1.3,
-	// 	},
-	// },
+	{
+		id: "fuji",
+		displayName: "藤",
+		layoutBasePath: "/fuji",
+		contentBasePath: "/fujibackground",
+		backgroundPath: "/fuji/output-2-2x-inv-vec.png",
+		available: true,
+		segmentLabels: {
+			layout: ["fuji"],
+			content: ["fuji"],
+		},
+		blackFillScale: {
+			layout: 1.3,
+			content: 1.3,
+		},
+	},
 	];
 
 /** Get only the available themes for runtime rotation */
