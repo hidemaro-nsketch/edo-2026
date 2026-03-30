@@ -72,7 +72,7 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		backgroundPath: "/fuji/output-2-2x-inv-vec.png",
 		available: true,
 		segmentLabels: {
-			layout: ["fuji", "eda"],
+			layout: ["fuji"],
 			content: ["fuji"],
 		},
 	},
