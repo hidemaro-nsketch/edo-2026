@@ -280,7 +280,13 @@ export class BuildSystem {
 				this.config,
 				currentLayer,
 				0,
-			).filter((instance) => instance.wipeRole !== 2);
+			)
+				.filter((instance) => instance.wipeRole !== 2)
+				.map((instance) => ({
+					...instance,
+					wipeRole: 0,
+					swipeProgress: 0,
+				}));
 		}
 
 		if (phase === "idle" || phase === "complete") {

@@ -12,6 +12,8 @@ import type {
 	ShuffleConfig,
 } from "./types";
 
+const SWIPE_REVEAL_EPSILON = 0.02;
+
 type SegmentCatalogs = {
 	originalSegments: SegmentInfo[];
 	mergedSegments: SegmentInfo[];
@@ -73,6 +75,27 @@ export function getAtlasSelectionForLayer(
 	config: ShuffleConfig,
 ): number {
 	return layer >= config.contentStartLayer ? 1 : 0;
+}
+
+function getDisplayedAtlasSelectionForSegmentAtLayer(
+	plan: CompiledPlan,
+	segId: number,
+	layer: number,
+	config: ShuffleConfig,
+): number {
+	if (layer < 1) return 0;
+	const lifecycle = plan.lifecycles[segId];
+	if (!lifecycle) return 0;
+
+	let lastSettleLayer = 0;
+	for (const leg of lifecycle.legs) {
+		if (leg.toLayer > layer) break;
+		if (leg.mode === "settle") {
+			lastSettleLayer = leg.toLayer;
+		}
+	}
+
+	return getAtlasSelectionForLayer(lastSettleLayer, config);
 }
 
 export function buildBaseRenderInstances(
@@ -148,7 +171,12 @@ export function buildBlackFillRenderInstancesForLayer(
 		w: entry.size[0],
 		h: entry.size[1],
 		sourceLayer: entry.sourceLayer,
-		useOthersAtlas: getAtlasSelectionForLayer(entry.sourceLayer, config),
+		useOthersAtlas: getDisplayedAtlasSelectionForSegmentAtLayer(
+			plan,
+			entry.segId,
+			entry.sourceLayer,
+			config,
+		),
 	}));
 }
 
@@ -163,7 +191,6 @@ export function buildSwipeRenderInstancesForLayer(
 	const legs = plan.legsByLayer[layer] ?? [];
 	const prevMapping = plan.mappingByLayer[layer - 1] ?? [];
 	const nextUseOthersAtlas = getAtlasSelectionForLayer(layer, config);
-	const prevUseOthersAtlas = getAtlasSelectionForLayer(layer - 1, config);
 	const catalogs = { originalSegments, mergedSegments };
 	const instances: SegmentRenderInstance[] = [];
 
@@ -172,8 +199,16 @@ export function buildSwipeRenderInstancesForLayer(
 
 		const oldSegId = prevMapping[leg.destSlot];
 		if (oldSegId == null) continue;
+		const oldUseOthersAtlas = getDisplayedAtlasSelectionForSegmentAtLayer(
+			plan,
+			oldSegId,
+			layer - 1,
+			config,
+		);
+		const showOnlyOld = swipeProgress <= SWIPE_REVEAL_EPSILON;
+		const showOnlyNew = swipeProgress >= 1 - SWIPE_REVEAL_EPSILON;
 
-		if (oldSegId === leg.segId || swipeProgress >= 1) {
+		if (oldSegId === leg.segId || showOnlyNew) {
 			instances.push(
 				buildSegmentInstanceAtSlot(
 					catalogs,
@@ -187,6 +222,20 @@ export function buildSwipeRenderInstancesForLayer(
 			continue;
 		}
 
+		if (showOnlyOld) {
+			instances.push(
+				buildSegmentInstanceAtSlot(
+					catalogs,
+					oldSegId,
+					leg.destSlot,
+					layer,
+					config,
+					oldUseOthersAtlas,
+				),
+			);
+			continue;
+		}
+
 		instances.push(
 			buildSegmentInstanceAtSlot(
 				catalogs,
@@ -194,7 +243,7 @@ export function buildSwipeRenderInstancesForLayer(
 				leg.destSlot,
 				layer,
 				config,
-				prevUseOthersAtlas,
+				oldUseOthersAtlas,
 				{ wipeRole: 1, swipeProgress },
 			),
 		);

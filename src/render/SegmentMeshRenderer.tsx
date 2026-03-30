@@ -141,7 +141,8 @@ void main() {
     float p = vSwipeProgress;
     // Add noise distortion to the clip boundary
     float noise = snoise(vec2(vUv.y * uNoiseFreq, uTime * uNoiseSpeed));
-    float threshold = p + noise * uNoiseAmp;
+    float noiseFade = smoothstep(0.0, 0.08, p) * (1.0 - smoothstep(0.92, 1.0, p));
+    float threshold = clamp(p + noise * uNoiseAmp * noiseFade, 0.0, 1.0);
     if (vWipeRole < 1.5) {
       // Old segment: keep right portion, discard left as wipe progresses
       if (x < threshold) discard;
@@ -306,6 +307,7 @@ export type WriteOptions = {
 	blackFills?: BlackFillRenderInstance[];
 	opacityOverride?: Map<number, number>;
 	dimFactor?: number;
+	othersSegments?: SegmentInfo[];
 };
 
 export function writeInstances(
@@ -317,6 +319,7 @@ export function writeInstances(
 	const blackFills = opts?.blackFills;
 	const opacityOverride = opts?.opacityOverride;
 	const dim = opts?.dimFactor ?? 1.0;
+	const othersSegments = opts?.othersSegments ?? segments;
 
 	const segCount = Math.min(instances.length, dg.maxInstances);
 	const bfCount = blackFills
@@ -328,7 +331,10 @@ export function writeInstances(
 	// Write segment instances
 	for (let i = 0; i < segCount; i++) {
 		const inst = instances[i];
-		const seg = segments[inst.segId];
+		const seg =
+			inst.useOthersAtlas > 0.5
+				? othersSegments[inst.segId]
+				: segments[inst.segId];
 
 		dg.posXY.setXY(i, inst.x, inst.y);
 		dg.posZ.setX(i, inst.z);
@@ -359,7 +365,8 @@ export function writeInstances(
 			const BF_SCALE = 1.15;
 			dg.size.setXY(idx, bf.w * BF_SCALE, bf.h * BF_SCALE);
 
-			const seg = segments[bf.segId];
+			const seg =
+				bf.useOthersAtlas > 0.5 ? othersSegments[bf.segId] : segments[bf.segId];
 			const off = idx * 4;
 			dg.uvRect.array[off] = seg.uvRect[0];
 			dg.uvRect.array[off + 1] = seg.uvRect[1];
@@ -594,8 +601,9 @@ export function SegmentMeshRenderer({
 				activeOpacityMap.set(inst.segId, activeOp);
 			}
 		}
-		writeInstances(activeGeo, sortedActive, data.activeSegments, {
+		writeInstances(activeGeo, sortedActive, data.baseSegments, {
 			opacityOverride: activeOpacityMap,
+			othersSegments: data.getSegmentsForLayer(data.currentLayer),
 		});
 
 		// Group active black fills by sourceLayer
@@ -629,6 +637,7 @@ export function SegmentMeshRenderer({
 				blackFills: layer0BlackFills,
 				dimFactor: data.dimFactor,
 				opacityOverride: baseOpacityMap,
+				othersSegments: data.getSegmentsForLayer(data.currentLayer),
 			});
 		}
 
@@ -657,6 +666,7 @@ export function SegmentMeshRenderer({
 				{
 					blackFills: layerBlackFills,
 					dimFactor: data.dimFactor,
+					othersSegments: data.getSegmentsForLayer(layerIdx),
 				},
 			);
 			settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");
