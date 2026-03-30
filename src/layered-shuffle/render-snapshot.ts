@@ -12,6 +12,62 @@ import type {
 	ShuffleConfig,
 } from "./types";
 
+type SegmentCatalogs = {
+	originalSegments: SegmentInfo[];
+	mergedSegments: SegmentInfo[];
+};
+
+function getSegmentsForAtlas(
+	catalogs: SegmentCatalogs,
+	useOthersAtlas: number,
+): SegmentInfo[] {
+	return useOthersAtlas > 0
+		? catalogs.mergedSegments
+		: catalogs.originalSegments;
+}
+
+function getContainedSizeForSlot(
+	catalogs: SegmentCatalogs,
+	segId: number,
+	slot: number,
+	useOthersAtlas: number,
+): [number, number] {
+	const [slotW, slotH] = getSlotWorldSize(catalogs.originalSegments, slot);
+	const seg = getSegmentsForAtlas(catalogs, useOthersAtlas)[segId];
+	const contentW =
+		useOthersAtlas > 0 ? seg.trimmedSize[0] : seg.bboxInSource[2];
+	const contentH =
+		useOthersAtlas > 0 ? seg.trimmedSize[1] : seg.bboxInSource[3];
+	return computeContainedSize(contentW, contentH, slotW, slotH);
+}
+
+function buildSegmentInstanceAtSlot(
+	catalogs: SegmentCatalogs,
+	segId: number,
+	slot: number,
+	layer: number,
+	config: ShuffleConfig,
+	useOthersAtlas: number,
+	options?: Partial<
+		Pick<SegmentRenderInstance, "wipeRole" | "isBboxOutline" | "swipeProgress">
+	>,
+): SegmentRenderInstance {
+	const [x, y] = getSlotWorldPos(catalogs.originalSegments, slot);
+	const [w, h] = getContainedSizeForSlot(catalogs, segId, slot, useOthersAtlas);
+	return {
+		segId,
+		x,
+		y,
+		z: layer * config.layerSpacing,
+		w,
+		h,
+		useOthersAtlas,
+		wipeRole: options?.wipeRole ?? 0,
+		isBboxOutline: options?.isBboxOutline ?? 0,
+		swipeProgress: options?.swipeProgress ?? 0,
+	};
+}
+
 export function getAtlasSelectionForLayer(
 	layer: number,
 	config: ShuffleConfig,
@@ -47,7 +103,8 @@ export function buildBaseRenderInstances(
 
 export function buildSettledRenderInstancesForLayer(
 	plan: CompiledPlan,
-	segments: SegmentInfo[],
+	originalSegments: SegmentInfo[],
+	mergedSegments: SegmentInfo[],
 	config: ShuffleConfig,
 	layer: number,
 ): SegmentRenderInstance[] {
@@ -56,33 +113,21 @@ export function buildSettledRenderInstancesForLayer(
 
 	const mapping = plan.mappingByLayer[layer];
 	const useOthersAtlas = getAtlasSelectionForLayer(layer, config);
+	const catalogs = { originalSegments, mergedSegments };
 	const instances: SegmentRenderInstance[] = [];
 
 	for (const [slotA, slotB] of swaps) {
 		for (const slot of [slotA, slotB]) {
-			const segId = mapping[slot];
-			const [x, y] = getSlotWorldPos(segments, slot);
-			const [slotW, slotH] = getSlotWorldSize(segments, slot);
-			const [w, h] = getSegmentContainedSize(
-				segments,
-				segId,
-				slotW,
-				slotH,
-				useOthersAtlas,
+			instances.push(
+				buildSegmentInstanceAtSlot(
+					catalogs,
+					mapping[slot],
+					slot,
+					layer,
+					config,
+					useOthersAtlas,
+				),
 			);
-
-			instances.push({
-				segId,
-				x,
-				y,
-				z: layer * config.layerSpacing,
-				w,
-				h,
-				useOthersAtlas,
-				wipeRole: 0,
-				isBboxOutline: 0,
-				swipeProgress: 0,
-			});
 		}
 	}
 
@@ -109,59 +154,61 @@ export function buildBlackFillRenderInstancesForLayer(
 
 export function buildSwipeRenderInstancesForLayer(
 	plan: CompiledPlan,
+	originalSegments: SegmentInfo[],
+	mergedSegments: SegmentInfo[],
 	config: ShuffleConfig,
 	layer: number,
 	swipeProgress: number,
 ): SegmentRenderInstance[] {
 	const legs = plan.legsByLayer[layer] ?? [];
 	const prevMapping = plan.mappingByLayer[layer - 1] ?? [];
-	const useOthersAtlas = getAtlasSelectionForLayer(layer, config);
+	const nextUseOthersAtlas = getAtlasSelectionForLayer(layer, config);
+	const prevUseOthersAtlas = getAtlasSelectionForLayer(layer - 1, config);
+	const catalogs = { originalSegments, mergedSegments };
 	const instances: SegmentRenderInstance[] = [];
 
 	for (const leg of legs) {
 		if (leg.mode === "pass") continue;
 
 		const oldSegId = prevMapping[leg.destSlot];
+		if (oldSegId == null) continue;
+
 		if (oldSegId === leg.segId || swipeProgress >= 1) {
-			instances.push({
-				segId: leg.segId,
-				x: leg.to[0],
-				y: leg.to[1],
-				z: leg.to[2],
-				w: leg.toSize[0],
-				h: leg.toSize[1],
-				useOthersAtlas,
-				wipeRole: 0,
-				isBboxOutline: 0,
-				swipeProgress: 0,
-			});
+			instances.push(
+				buildSegmentInstanceAtSlot(
+					catalogs,
+					leg.segId,
+					leg.destSlot,
+					layer,
+					config,
+					nextUseOthersAtlas,
+				),
+			);
 			continue;
 		}
 
-		instances.push({
-			segId: oldSegId,
-			x: leg.to[0],
-			y: leg.to[1],
-			z: leg.to[2],
-			w: leg.toSize[0],
-			h: leg.toSize[1],
-			useOthersAtlas: getAtlasSelectionForLayer(layer - 1, config),
-			wipeRole: 1,
-			isBboxOutline: 0,
-			swipeProgress,
-		});
-		instances.push({
-			segId: leg.segId,
-			x: leg.to[0],
-			y: leg.to[1],
-			z: leg.to[2],
-			w: leg.toSize[0],
-			h: leg.toSize[1],
-			useOthersAtlas,
-			wipeRole: 2,
-			isBboxOutline: 0,
-			swipeProgress,
-		});
+		instances.push(
+			buildSegmentInstanceAtSlot(
+				catalogs,
+				oldSegId,
+				leg.destSlot,
+				layer,
+				config,
+				prevUseOthersAtlas,
+				{ wipeRole: 1, swipeProgress },
+			),
+		);
+		instances.push(
+			buildSegmentInstanceAtSlot(
+				catalogs,
+				leg.segId,
+				leg.destSlot,
+				layer,
+				config,
+				nextUseOthersAtlas,
+				{ wipeRole: 2, swipeProgress },
+			),
+		);
 	}
 
 	return instances;
@@ -169,24 +216,26 @@ export function buildSwipeRenderInstancesForLayer(
 
 export function buildFlashRenderInstancesForLayer(
 	plan: CompiledPlan,
+	originalSegments: SegmentInfo[],
+	mergedSegments: SegmentInfo[],
 	config: ShuffleConfig,
 	layer: number,
 ): SegmentRenderInstance[] {
 	const useOthersAtlas = getAtlasSelectionForLayer(layer, config);
+	const catalogs = { originalSegments, mergedSegments };
 	return (plan.legsByLayer[layer] ?? [])
 		.filter((leg) => leg.mode === "settle")
-		.map((leg) => ({
-			segId: leg.segId,
-			x: leg.to[0],
-			y: leg.to[1],
-			z: leg.to[2],
-			w: leg.toSize[0],
-			h: leg.toSize[1],
-			useOthersAtlas,
-			wipeRole: 0,
-			isBboxOutline: 1,
-			swipeProgress: 0,
-		}));
+		.map((leg) =>
+			buildSegmentInstanceAtSlot(
+				catalogs,
+				leg.segId,
+				leg.destSlot,
+				layer,
+				config,
+				useOthersAtlas,
+				{ isBboxOutline: 1 },
+			),
+		);
 }
 
 export function buildPreCollapseFlashInstances(
@@ -200,6 +249,7 @@ export function buildPreCollapseFlashInstances(
 		const settled = buildSettledRenderInstancesForLayer(
 			plan,
 			segments,
+			segments,
 			config,
 			layer,
 		);
@@ -212,19 +262,22 @@ export function buildPreCollapseFlashInstances(
 
 export function buildCollapseRenderInstances(
 	plan: CompiledPlan,
+	originalSegments: SegmentInfo[],
+	mergedSegments: SegmentInfo[],
 	config: ShuffleConfig,
 	collapsingLayer: number,
 	progress: number,
 ): SegmentRenderInstance[] {
 	const instances: SegmentRenderInstance[] = [];
 	const animatingSegIds = new Set<number>();
+	const catalogs = { originalSegments, mergedSegments };
 
 	const collapseLegs = plan.legsByLayer[collapsingLayer] ?? [];
 	for (const leg of collapseLegs) {
 		const lifecycle = plan.lifecycles[leg.segId];
 		if (lifecycle.settleLayer > collapsingLayer) continue;
 		animatingSegIds.add(leg.segId);
-		instances.push(interpolateLegReverse(leg, progress, config));
+		instances.push(interpolateLegReverse(leg, progress, config, catalogs));
 	}
 
 	for (const lifecycle of plan.lifecycles) {
@@ -234,56 +287,53 @@ export function buildCollapseRenderInstances(
 			(leg) => leg.toLayer === lifecycle.settleLayer,
 		);
 		if (!settledLeg) continue;
-		instances.push({
-			segId: lifecycle.segId,
-			x: settledLeg.to[0],
-			y: settledLeg.to[1],
-			z: settledLeg.to[2],
-			w: settledLeg.toSize[0],
-			h: settledLeg.toSize[1],
-			useOthersAtlas: getAtlasSelectionForLayer(lifecycle.settleLayer, config),
-			wipeRole: 0,
-			isBboxOutline: 0,
-			swipeProgress: 0,
-		});
+		const useOthersAtlas = getAtlasSelectionForLayer(
+			lifecycle.settleLayer,
+			config,
+		);
+		instances.push(
+			buildSegmentInstanceAtSlot(
+				catalogs,
+				lifecycle.segId,
+				settledLeg.destSlot,
+				lifecycle.settleLayer,
+				config,
+				useOthersAtlas,
+			),
+		);
 	}
 
 	return instances;
-}
-
-function getSegmentContainedSize(
-	segments: SegmentInfo[],
-	segId: number,
-	slotW: number,
-	slotH: number,
-	useOthersAtlas: number,
-): [number, number] {
-	if (useOthersAtlas === 0) {
-		return [slotW, slotH];
-	}
-
-	const seg = segments[segId];
-	return computeContainedSize(
-		seg.trimmedSize[0],
-		seg.trimmedSize[1],
-		slotW,
-		slotH,
-	);
 }
 
 function interpolateLegReverse(
 	leg: CompiledPlan["legsByLayer"][number][number],
 	t: number,
 	config: ShuffleConfig,
+	catalogs: SegmentCatalogs,
 ): SegmentRenderInstance {
+	const fromUseOthersAtlas = getAtlasSelectionForLayer(leg.toLayer - 1, config);
+	const toUseOthersAtlas = getAtlasSelectionForLayer(leg.toLayer, config);
+	const [fromW, fromH] = getContainedSizeForSlot(
+		catalogs,
+		leg.segId,
+		leg.fromSlot,
+		fromUseOthersAtlas,
+	);
+	const [toW, toH] = getContainedSizeForSlot(
+		catalogs,
+		leg.segId,
+		leg.destSlot,
+		toUseOthersAtlas,
+	);
 	return {
 		segId: leg.segId,
 		x: leg.to[0] + (leg.from[0] - leg.to[0]) * t,
 		y: leg.to[1] + (leg.from[1] - leg.to[1]) * t,
 		z: leg.to[2] + (leg.from[2] - leg.to[2]) * t,
-		w: leg.toSize[0] + (leg.fromSize[0] - leg.toSize[0]) * t,
-		h: leg.toSize[1] + (leg.fromSize[1] - leg.toSize[1]) * t,
-		useOthersAtlas: getAtlasSelectionForLayer(leg.toLayer, config),
+		w: toW + (fromW - toW) * t,
+		h: toH + (fromH - toH) * t,
+		useOthersAtlas: toUseOthersAtlas,
 		wipeRole: 0,
 		isBboxOutline: 0,
 		swipeProgress: 0,

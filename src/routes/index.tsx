@@ -20,23 +20,23 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { createFileRoute } from "@tanstack/react-router";
 import { button, Leva, useControls } from "leva"; // Leva: ブラウザ上のデバッグ GUI ライブラリ
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as THREE from "three";
+import type * as THREE from "three";
 import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system"; // シャッフルアニメーションの状態管理エンジン
 import { compilePlan } from "../layered-shuffle/compiled-plan"; // セグメント＋設定 → 実行プランへ変換
 import { DEFAULT_CONFIG, type ShuffleConfig } from "../layered-shuffle/types";
 import { CameraRig, Y_CENTER_OFFSET } from "../render/CameraRig"; // レイヤー追従カメラ
 import { ConnectionLines } from "../render/ConnectionLines"; // セグメント間の接続線描画
-import {
-	SegmentMeshes,
-	type SwipeEffectParams,
-} from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
+import { SegmentMeshes, type SwipeEffectParams } from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
 import { TransitionRenderer } from "../render/TransitionRenderer"; // テーマ転換描画
 import { KIMONO_SIZE } from "../sakura/constants";
 import { loadAtlasTextures } from "../sakura/segment-manager"; // アトラス画像の読み込み・テクスチャ化
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
 import { ThemeTransitionSystem } from "../theme-transition/transition-system";
-import type { TransitionConfig, TransitionPhase } from "../theme-transition/types";
+import type {
+	TransitionConfig,
+	TransitionPhase,
+} from "../theme-transition/types";
 import { DEFAULT_TRANSITION_CONFIG } from "../theme-transition/types";
 import {
 	getAvailableThemes,
@@ -88,9 +88,7 @@ type SceneStatus = {
  * マニフェストには各セグメントの位置・サイズ・アトラス内座標などが定義されている。
  * ロード失敗時は null を返し、画面は何も表示しない（静かに失敗）。
  */
-async function loadManifest(
-	basePath: string,
-): Promise<SegmentManifest | null> {
+async function loadManifest(basePath: string): Promise<SegmentManifest | null> {
 	try {
 		const res = await fetch(`${basePath}/segments.manifest.json`);
 		if (!res.ok) return null;
@@ -296,25 +294,80 @@ function useDebugGui(): DebugGuiResult {
 	// セグメントが次の位置へ移動する際のアニメーション設定
 	const animation = useControls("Animation", {
 		flashCount: { value: DEFAULT_CONFIG.flashCount, min: 0, max: 6, step: 1 },
-		flashOnDuration: { value: DEFAULT_CONFIG.flashOnDuration, min: 0.01, max: 0.5, step: 0.01 },
-		flashOffDuration: { value: DEFAULT_CONFIG.flashOffDuration, min: 0.0, max: 0.5, step: 0.01 },
-		swipeDuration: { value: DEFAULT_CONFIG.swipeDuration, min: 0.1, max: 8, step: 0.1 }, // 移動にかかる秒数
-		swipeDurationJitter: { value: DEFAULT_CONFIG.swipeDurationJitter, min: 0, max: 0.8, step: 0.01 }, // ランダムなばらつき
-		holdDuration: { value: DEFAULT_CONFIG.holdDuration, min: 0, max: 10, step: 0.1 }, // 到着後に静止する秒数
+		flashOnDuration: {
+			value: DEFAULT_CONFIG.flashOnDuration,
+			min: 0.01,
+			max: 0.5,
+			step: 0.01,
+		},
+		flashOffDuration: {
+			value: DEFAULT_CONFIG.flashOffDuration,
+			min: 0.0,
+			max: 0.5,
+			step: 0.01,
+		},
+		swipeDuration: {
+			value: DEFAULT_CONFIG.swipeDuration,
+			min: 0.1,
+			max: 8,
+			step: 0.1,
+		}, // 移動にかかる秒数
+		swipeDurationJitter: {
+			value: DEFAULT_CONFIG.swipeDurationJitter,
+			min: 0,
+			max: 0.8,
+			step: 0.01,
+		}, // ランダムなばらつき
+		holdDuration: {
+			value: DEFAULT_CONFIG.holdDuration,
+			min: 0,
+			max: 10,
+			step: 0.1,
+		}, // 到着後に静止する秒数
 	});
 
 	// レイヤー構成の設定
 	const layers = useControls("Layers", {
-		maxGenerations: { value: DEFAULT_CONFIG.maxGenerations, min: 1, max: 20, step: 1 }, // シャッフルの世代数（レイヤー数）
-		layerSpacing: { value: DEFAULT_CONFIG.layerSpacing, min: 0.1, max: 4, step: 0.1 }, // レイヤー間の Z 軸距離
-		contentStartLayer: { value: DEFAULT_CONFIG.contentStartLayer, min: 1, max: 20, step: 1 }, // othersアトラスを使い始めるレイヤー
+		maxGenerations: {
+			value: DEFAULT_CONFIG.maxGenerations,
+			min: 1,
+			max: 20,
+			step: 1,
+		}, // シャッフルの世代数（レイヤー数）
+		layerSpacing: {
+			value: DEFAULT_CONFIG.layerSpacing,
+			min: 0.1,
+			max: 4,
+			step: 0.1,
+		}, // レイヤー間の Z 軸距離
+		contentStartLayer: {
+			value: DEFAULT_CONFIG.contentStartLayer,
+			min: 1,
+			max: 20,
+			step: 1,
+		}, // othersアトラスを使い始めるレイヤー
 	});
 
 	// コラプスフェーズ（全レイヤーが最終位置に収束）の設定
 	const collapse = useControls("Collapse", {
-		collapseDuration: { value: DEFAULT_CONFIG.collapseDuration, min: 0.05, max: 3, step: 0.05 }, // 各セグメントの収束アニメ秒数
-		collapseStagger: { value: DEFAULT_CONFIG.collapseStagger, min: 0, max: 2, step: 0.01 }, // セグメント間の開始時間差
-		holdAfterComplete: { value: DEFAULT_CONFIG.holdAfterComplete, min: 0, max: 5, step: 0.1 }, // 完了後の静止秒数
+		collapseDuration: {
+			value: DEFAULT_CONFIG.collapseDuration,
+			min: 0.05,
+			max: 3,
+			step: 0.05,
+		}, // 各セグメントの収束アニメ秒数
+		collapseStagger: {
+			value: DEFAULT_CONFIG.collapseStagger,
+			min: 0,
+			max: 2,
+			step: 0.01,
+		}, // セグメント間の開始時間差
+		holdAfterComplete: {
+			value: DEFAULT_CONFIG.holdAfterComplete,
+			min: 0,
+			max: 5,
+			step: 0.1,
+		}, // 完了後の静止秒数
 	});
 
 	// スワイプエフェクト設定（ノイズ境界線 + 非アクティブスロットの暗さ）
@@ -369,9 +422,24 @@ function useDebugGui(): DebugGuiResult {
 
 	// テーマ転換アニメーション設定
 	const transitionGui = useControls("Theme Transition", {
-		scatterDuration: { value: DEFAULT_TRANSITION_CONFIG.scatterDuration, min: 0.3, max: 5, step: 0.1 },
-		blackoutDuration: { value: DEFAULT_TRANSITION_CONFIG.blackoutDuration, min: 0.1, max: 3, step: 0.1 },
-		gatherDuration: { value: DEFAULT_TRANSITION_CONFIG.gatherDuration, min: 0.3, max: 5, step: 0.1 },
+		scatterDuration: {
+			value: DEFAULT_TRANSITION_CONFIG.scatterDuration,
+			min: 0.3,
+			max: 5,
+			step: 0.1,
+		},
+		blackoutDuration: {
+			value: DEFAULT_TRANSITION_CONFIG.blackoutDuration,
+			min: 0.1,
+			max: 3,
+			step: 0.1,
+		},
+		gatherDuration: {
+			value: DEFAULT_TRANSITION_CONFIG.gatherDuration,
+			min: 0.3,
+			max: 5,
+			step: 0.1,
+		},
 	});
 
 	// setMonitor を ref 経由で SegmentMeshes に渡す
@@ -498,14 +566,24 @@ function ShuffleContent({
 	// 初回: セグメント＋設定からプランをコンパイルし、BuildSystem を生成
 	if (!systemRef.current) {
 		const plan = createNextPlan();
-		systemRef.current = new BuildSystem(plan, config, segments);
+		systemRef.current = new BuildSystem(
+			plan,
+			config,
+			originalSegments,
+			segments,
+		);
 	}
 
 	// GUI の Reset ボタン押下時: resetTrigger の変化を検知して再生成
 	if (resetTrigger !== lastResetRef.current) {
 		lastResetRef.current = resetTrigger;
 		const plan = createNextPlan();
-		systemRef.current = new BuildSystem(plan, config, segments);
+		systemRef.current = new BuildSystem(
+			plan,
+			config,
+			originalSegments,
+			segments,
+		);
 	}
 
 	const system = systemRef.current;
@@ -530,13 +608,18 @@ function ShuffleContent({
 	// Update background dim ref + scene status per-frame
 	useFrame((_, delta) => {
 		const phase = system.state.phase;
-		const stayDim = phase === "swipe" || phase === "dimming"
-			|| (phase === "hold" && system.state.phaseTime < config.dimHoldTime);
+		const stayDim =
+			phase === "swipe" ||
+			phase === "dimming" ||
+			(phase === "hold" && system.state.phaseTime < config.dimHoldTime);
 		const dimTarget = stayDim ? swipeEffect.dimFactor : 1.0;
 		const isDimming = dimTarget < bgDimRef.current;
-		const dimDuration = isDimming ? config.dimFadeInDuration : config.dimFadeOutDuration;
+		const dimDuration = isDimming
+			? config.dimFadeInDuration
+			: config.dimFadeOutDuration;
 		const dimSpeed = 4.6 / Math.max(0.01, dimDuration);
-		bgDimRef.current += (dimTarget - bgDimRef.current) * Math.min(1, delta * dimSpeed);
+		bgDimRef.current +=
+			(dimTarget - bgDimRef.current) * Math.min(1, delta * dimSpeed);
 
 		// Write status for HTML panel (no React re-render)
 		if (statusRef) {
@@ -609,15 +692,20 @@ function CameraAndLifecycle({
 
 	useFrame(() => {
 		const phase = buildSystem.state.phase;
+		const isTerminalPhase = phase === "complete" || phase === "idle";
 
-		// Reset guard only on idle→non-idle transition
-		if (prevPhaseRef.current === "idle" && phase !== "idle") {
+		// Reset guard only when leaving a terminal phase.
+		if (
+			(prevPhaseRef.current === "idle" ||
+				prevPhaseRef.current === "complete") &&
+			!isTerminalPhase
+		) {
 			cycleCompleteCalledRef.current = false;
 		}
 		prevPhaseRef.current = phase;
 
-		// アニメーション完了 → idle に遷移したらテーマ切り替え or 同テーマ再開
-		if (phase === "idle") {
+		// アニメーション完了 → complete / idle に遷移したらテーマ切り替え or 同テーマ再開
+		if (isTerminalPhase) {
 			if (onCycleComplete && !cycleCompleteCalledRef.current) {
 				// Notify parent to switch theme (will unmount this component via key change)
 				cycleCompleteCalledRef.current = true;
@@ -661,9 +749,14 @@ function CameraAndLifecycle({
  *   - 転換中は ShuffleContent をフリーズし TransitionRenderer を表示
  *   - 転換完了後 currentAssets = nextAssets で切り替え
  */
-function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }) {
+function Scene({
+	statusRef,
+}: {
+	statusRef: React.MutableRefObject<SceneStatus>;
+}) {
 	const [currentAssets, setCurrentAssets] = useState<ThemeAssets | null>(null);
-	const [transitionPhase, setTransitionPhase] = useState<TransitionPhase | null>(null);
+	const [transitionPhase, setTransitionPhase] =
+		useState<TransitionPhase | null>(null);
 
 	const themeIndexRef = useRef(0);
 	const currentAssetsRef = useRef<ThemeAssets | null>(null);
@@ -695,15 +788,16 @@ function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }
 				statusRef.current.themeIndex = 0;
 				statusRef.current.themeCount = AVAILABLE_THEMES.length;
 				statusRef.current.segmentCount = assets.segments.length;
-				statusRef.current.maxLayers = gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations;
 				statusRef.current.loading = false;
 				setCurrentAssets(assets);
 			}
 		}
 
 		init();
-		return () => { controller.abort(); };
-	}, []);
+		return () => {
+			controller.abort();
+		};
+	}, [statusRef]);
 
 	// Cleanup textures on unmount
 	useEffect(() => {
@@ -760,9 +854,15 @@ function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }
 		transitionCountRef.current += 1;
 		const oldThemeId = AVAILABLE_THEMES[themeIndexRef.current]?.id ?? "sakura";
 		const transitionConfig: Partial<TransitionConfig> = {
-			scatterDuration: gui.transitionConfig?.scatterDuration ?? DEFAULT_TRANSITION_CONFIG.scatterDuration,
-			blackoutDuration: gui.transitionConfig?.blackoutDuration ?? DEFAULT_TRANSITION_CONFIG.blackoutDuration,
-			gatherDuration: gui.transitionConfig?.gatherDuration ?? DEFAULT_TRANSITION_CONFIG.gatherDuration,
+			scatterDuration:
+				gui.transitionConfig?.scatterDuration ??
+				DEFAULT_TRANSITION_CONFIG.scatterDuration,
+			blackoutDuration:
+				gui.transitionConfig?.blackoutDuration ??
+				DEFAULT_TRANSITION_CONFIG.blackoutDuration,
+			gatherDuration:
+				gui.transitionConfig?.gatherDuration ??
+				DEFAULT_TRANSITION_CONFIG.gatherDuration,
 			noiseSeed: Date.now() + transitionCountRef.current,
 			oldThemeId,
 			newThemeId: nextTheme.id,
@@ -865,7 +965,11 @@ function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }
 		<>
 			{/* Background: hidden during transitions (TransitionRenderer handles it) */}
 			{!transitionPhase && (
-				<KimonoBackground texture={currentAssets.kimonoTexture} opacity={gui.bgOpacity} bgDimRef={bgDimRef} />
+				<KimonoBackground
+					texture={currentAssets.kimonoTexture}
+					opacity={gui.bgOpacity}
+					bgDimRef={bgDimRef}
+				/>
 			)}
 
 			{/* Normal shuffle content — frozen during transitions */}
@@ -1011,7 +1115,11 @@ const PHASE_LABELS: Record<string, string> = {
  * HTML status panel that reads from a mutable ref via rAF (no React re-renders).
  * Displays current theme, phase, layer progress, and segment count.
  */
-function StatusPanel({ statusRef }: { statusRef: React.RefObject<SceneStatus> }) {
+function StatusPanel({
+	statusRef,
+}: {
+	statusRef: React.RefObject<SceneStatus>;
+}) {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -1025,20 +1133,24 @@ function StatusPanel({ statusRef }: { statusRef: React.RefObject<SceneStatus> })
 			}
 			const s = statusRef.current;
 			const themeLabel = s.themeName ? `${s.themeName} (${s.themeId})` : "---";
-			const seqLabel = s.themeCount > 0
-				? `${s.themeIndex + 1} / ${s.themeCount}`
-				: "---";
-			const phaseLabel = s.loading ? "Loading..." : (PHASE_LABELS[s.phase] ?? s.phase);
-			const layerLabel = s.loading ? "---" : `${s.currentLayer} / ${s.maxLayers}`;
+			const seqLabel =
+				s.themeCount > 0 ? `${s.themeIndex + 1} / ${s.themeCount}` : "---";
+			const phaseLabel = s.loading
+				? "Loading..."
+				: (PHASE_LABELS[s.phase] ?? s.phase);
+			const layerLabel = s.loading
+				? "---"
+				: `${s.currentLayer} / ${s.maxLayers}`;
 			const timeLabel = s.loading ? "---" : s.phaseTime.toFixed(2);
 
 			// Atlas source label
 			const atlasLabel = s.usingOthers ? "others" : "base";
 
 			// Active swaps: show slot pairs
-			const swapsLabel = s.activeSwaps.length > 0
-				? s.activeSwaps.map(([a, b]) => `[${a}↔${b}]`).join(" ")
-				: "---";
+			const swapsLabel =
+				s.activeSwaps.length > 0
+					? s.activeSwaps.map(([a, b]) => `[${a}↔${b}]`).join(" ")
+					: "---";
 
 			// Slot mapping: only show entries where slot !== segId.
 			// Color-code by atlas: others segments in orange, base in blue.
@@ -1050,9 +1162,8 @@ function StatusPanel({ statusRef }: { statusRef: React.RefObject<SceneStatus> })
 					return `<span style="color:${color}">${slot}→${segId}${isOthers ? "*" : ""}</span>`;
 				})
 				.filter(Boolean);
-			const mappingLabel = changedSlots.length > 0
-				? changedSlots.join("&nbsp; ")
-				: "---";
+			const mappingLabel =
+				changedSlots.length > 0 ? changedSlots.join("&nbsp; ") : "---";
 
 			// Transition phase label
 			const transLabel = s.transitionPhase

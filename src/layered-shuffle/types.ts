@@ -63,14 +63,12 @@ export type SegmentLeg = {
 	toLayer: number;
 	/** Mode: "pass" = same position, "settle" = new position (swapped) */
 	mode: "pass" | "settle";
+	/** Source slot index on the previous layer */
+	fromSlot: number;
 	/** Start position [x, y, z] */
 	from: [number, number, number];
 	/** End position [x, y, z] */
 	to: [number, number, number];
-	/** Start size [w, h] */
-	fromSize: [number, number];
-	/** End size [w, h] (object-fit contained for settle) */
-	toSize: [number, number];
 	/** Destination slot index at toLayer (pre-computed to avoid indexOf at runtime) */
 	destSlot: number;
 };

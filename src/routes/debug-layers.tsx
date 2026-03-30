@@ -226,6 +226,7 @@ function drawLayer(
 		const settled = buildSettledRenderInstancesForLayer(
 			plan,
 			layoutSegments,
+			mergedSegments,
 			DEFAULT_CONFIG,
 			l,
 		);

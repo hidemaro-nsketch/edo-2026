@@ -7,7 +7,6 @@ import {
 	// buildPreCollapseFlashInstances,
 	buildSettledRenderInstancesForLayer,
 	buildSwipeRenderInstancesForLayer,
-	getAtlasSelectionForLayer,
 } from "./render-snapshot";
 import type {
 	BlackFillRenderInstance,
@@ -24,7 +23,8 @@ type ConnectionLine = {
 
 export class BuildSystem {
 	readonly config: ShuffleConfig;
-	readonly segments: SegmentInfo[];
+	readonly originalSegments: SegmentInfo[];
+	readonly mergedSegments: SegmentInfo[];
 	readonly plan: CompiledPlan;
 
 	state: BuildState;
@@ -38,11 +38,13 @@ export class BuildSystem {
 	constructor(
 		plan: CompiledPlan,
 		config: ShuffleConfig,
-		segments: SegmentInfo[],
+		originalSegments: SegmentInfo[],
+		mergedSegments: SegmentInfo[],
 	) {
 		this.plan = plan;
 		this.config = config;
-		this.segments = segments;
+		this.originalSegments = originalSegments;
+		this.mergedSegments = mergedSegments;
 		this.state = { currentLayer: 1, phase: "flash", phaseTime: 0 };
 		this.currentSwipeDuration = this.pickSwipeDuration();
 	}
@@ -120,6 +122,8 @@ export class BuildSystem {
 	private updateFlash(dt: number): void {
 		const flashTargets = buildFlashRenderInstancesForLayer(
 			this.plan,
+			this.originalSegments,
+			this.mergedSegments,
 			this.config,
 			this.state.currentLayer,
 		);
@@ -159,9 +163,8 @@ export class BuildSystem {
 
 	private commitLayer(): void {
 		if (this.state.currentLayer >= this.config.maxGenerations) {
-			// Collapse disabled: skip preCollapse/collapsing, go directly to holding
-			// this.state.phase = "preCollapse";
-			this.state.phase = "holding";
+			// Keep the final stack visible and let the parent trigger the next scene phase.
+			this.state.phase = "complete";
 			this.state.phaseTime = 0;
 			return;
 		}
@@ -245,6 +248,8 @@ export class BuildSystem {
 			if (!this.isFlashVisible(this.state.phaseTime)) return [];
 			return buildFlashRenderInstancesForLayer(
 				this.plan,
+				this.originalSegments,
+				this.mergedSegments,
 				this.config,
 				currentLayer,
 			);
@@ -266,26 +271,16 @@ export class BuildSystem {
 		// 	);
 		// }
 
-		// Dimming phase: show swap-target segments as active (undimmed) at their current positions
+		// Dimming phase: keep the pre-swipe slot contents visible.
 		if (phase === "dimming") {
-			const legs = this.plan.legsByLayer[currentLayer] ?? [];
-			const instances: SegmentRenderInstance[] = [];
-			for (const leg of legs) {
-				if (leg.mode !== "settle") continue;
-				instances.push({
-					segId: leg.segId,
-					x: leg.from[0],
-					y: leg.from[1],
-					z: leg.from[2],
-					w: leg.fromSize[0],
-					h: leg.fromSize[1],
-					useOthersAtlas: getAtlasSelectionForLayer(leg.toLayer - 1, this.config),
-					wipeRole: 0,
-					isBboxOutline: 0,
-					swipeProgress: 0,
-				});
-			}
-			return instances;
+			return buildSwipeRenderInstancesForLayer(
+				this.plan,
+				this.originalSegments,
+				this.mergedSegments,
+				this.config,
+				currentLayer,
+				0,
+			).filter((instance) => instance.wipeRole !== 2);
 		}
 
 		if (phase === "idle" || phase === "complete") {
@@ -299,7 +294,8 @@ export class BuildSystem {
 				instances.push(
 					...buildSettledRenderInstancesForLayer(
 						this.plan,
-						this.segments,
+						this.originalSegments,
+						this.mergedSegments,
 						this.config,
 						layer,
 					),
@@ -311,7 +307,8 @@ export class BuildSystem {
 		if (phase === "hold") {
 			return buildSettledRenderInstancesForLayer(
 				this.plan,
-				this.segments,
+				this.originalSegments,
+				this.mergedSegments,
 				this.config,
 				currentLayer,
 			);
@@ -319,6 +316,8 @@ export class BuildSystem {
 
 		return buildSwipeRenderInstancesForLayer(
 			this.plan,
+			this.originalSegments,
+			this.mergedSegments,
 			this.config,
 			currentLayer,
 			this.getSwipeProgress(),
@@ -334,7 +333,8 @@ export class BuildSystem {
 				layer,
 				buildSettledRenderInstancesForLayer(
 					this.plan,
-					this.segments,
+					this.originalSegments,
+					this.mergedSegments,
 					this.config,
 					layer,
 				),
@@ -467,6 +467,8 @@ export class BuildSystem {
 			case "swipe":
 			case "hold":
 				return this.state.currentLayer - 1;
+			case "complete":
+				return this.config.maxGenerations;
 			// Collapse disabled: preCollapse no longer entered
 			// case "preCollapse":
 			// 	return this.config.maxGenerations;
@@ -474,7 +476,6 @@ export class BuildSystem {
 			case "preCollapse":
 			case "collapsing":
 			case "holding":
-			case "complete":
 			case "idle":
 				return 0;
 		}

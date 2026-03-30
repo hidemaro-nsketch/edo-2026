@@ -13,11 +13,7 @@
  *   5. Build vacated slot records for black fill rendering
  */
 
-import {
-	computeContainedSize,
-	getSlotWorldPos,
-	getSlotWorldSize,
-} from "../sakura/constants";
+import { getSlotWorldPos, getSlotWorldSize } from "../sakura/constants";
 import type { SegmentInfo } from "../sakura/types";
 import type {
 	CompiledPlan,
@@ -254,33 +250,13 @@ export function compilePlan(
 			const [toX, toY] = getSlotWorldPos(segments, currSlot);
 			const toZ = layer * config.layerSpacing;
 
-			const fromSlotSize = getSlotWorldSize(segments, prevSlot);
-			let toSlotSize = getSlotWorldSize(segments, currSlot);
-
-			if (mode === "settle" && prevSlot !== currSlot) {
-				// Choose content dimensions based on which atlas is used at this layer.
-				// Layers >= contentStartLayer render "others" atlas content (trimmedSize),
-				// while lower layers render the original sakura content (bboxInSource).
-				const useOthersContent = layer >= config.contentStartLayer;
-				const contentSize: [number, number] = useOthersContent
-					? segments[segId].trimmedSize
-					: [segments[segId].bboxInSource[2], segments[segId].bboxInSource[3]];
-				toSlotSize = computeContainedSize(
-					contentSize[0],
-					contentSize[1],
-					toSlotSize[0],
-					toSlotSize[1],
-				);
-			}
-
 			const leg: SegmentLeg = {
 				segId,
 				toLayer: layer,
 				mode,
+				fromSlot: prevSlot,
 				from: [fromX, fromY, fromZ],
 				to: [toX, toY, toZ],
-				fromSize: fromSlotSize,
-				toSize: toSlotSize,
 				destSlot: currSlot,
 			};
 
