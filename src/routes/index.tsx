@@ -21,7 +21,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { button, Leva, useControls } from "leva"; // Leva: ブラウザ上のデバッグ GUI ライブラリ
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as THREE from "three";
-import { SRGBColorSpace, type Texture, TextureLoader } from "three";
+import type { Texture } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system"; // シャッフルアニメーションの状態管理エンジン
 import { compilePlan } from "../layered-shuffle/compiled-plan"; // セグメント＋設定 → 実行プランへ変換
 import {
@@ -32,23 +32,20 @@ import {
 	THEME_CATEGORY_NAMES,
 } from "../layered-shuffle/types";
 import { CameraRig, Y_CENTER_OFFSET } from "../render/CameraRig"; // レイヤー追従カメラ
+import { SakuraFixedScene } from "../render/SakuraFixedScene"; // 桜固定ループシーン
 import { ConnectionLines } from "../render/ConnectionLines"; // セグメント間の接続線描画
 import { SegmentMeshes, type SwipeEffectParams } from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
 import { TransitionRenderer } from "../render/TransitionRenderer"; // テーマ転換描画
 import { KIMONO_SIZE } from "../sakura/constants";
-import { loadAtlasTextures } from "../sakura/segment-manager"; // アトラス画像の読み込み・テクスチャ化
-import type { SegmentInfo, SegmentManifest } from "../sakura/types";
+import type { SegmentInfo } from "../sakura/types";
 import { ThemeTransitionSystem } from "../theme-transition/transition-system";
 import type {
 	TransitionConfig,
 	TransitionPhase,
 } from "../theme-transition/types";
 import { DEFAULT_TRANSITION_CONFIG } from "../theme-transition/types";
-import {
-	getAvailableThemes,
-	getNextThemeIndex,
-	type ThemeConfig,
-} from "../themes/theme-config";
+import { getAvailableThemes, getNextThemeIndex } from "../themes/theme-config";
+import { loadThemeAssets, type ThemeAssets } from "../themes/theme-loader";
 
 /** TanStack Router: "/" パスにこのページを登録 */
 export const Route = createFileRoute("/")({ component: App });
@@ -87,168 +84,10 @@ type SceneStatus = {
 	textureCount: number;
 };
 
-// ─── Manifest loader ────────────────────────────────────────────────────────
+// ─── Theme Helpers ──────────────────────────────────────────────────────────
 
-/**
- * セグメントマニフェスト（segments.manifest.json）を非同期で取得する。
- * マニフェストには各セグメントの位置・サイズ・アトラス内座標などが定義されている。
- * ロード失敗時は null を返し、画面は何も表示しない（静かに失敗）。
- */
-async function loadManifest(basePath: string): Promise<SegmentManifest | null> {
-	try {
-		const res = await fetch(`${basePath}/segments.manifest.json`);
-		if (!res.ok) return null;
-		return (await res.json()) as SegmentManifest;
-	} catch {
-		return null;
-	}
-}
-
-/**
- * 元のセグメント配列のレイアウト（bboxInSource, originalSize）を維持しつつ、
- * 描画内容（uvRect, trimmedSize, pixelRect）を "others" マニフェストのセグメントに差し替える。
- * others のセグメント数が足りない場合はサイクリックに再利用する。
- */
-/** サイズ比がこの閾値を超えるペアはスワップしない（面積比） */
-const SWAP_SIZE_RATIO_MAX = 4.0;
-
-function mergeSegmentsWithOthersContent(
-	layoutSegments: SegmentInfo[],
-	contentSegments: SegmentInfo[],
-): SegmentInfo[] {
-	const area = (s: SegmentInfo) => s.originalSize[0] * s.originalSize[1];
-	const contentCount = contentSegments.length;
-
-	return layoutSegments.map((seg, i) => {
-		const content = contentSegments[i % contentCount];
-		const layoutArea = area(seg);
-		const contentArea = area(content);
-		const ratio =
-			contentArea > layoutArea
-				? contentArea / layoutArea
-				: layoutArea / contentArea;
-
-		// サイズ差が大きすぎる場合はスワップせず元のまま
-		if (ratio > SWAP_SIZE_RATIO_MAX) {
-			return seg;
-		}
-
-		return {
-			...seg,
-			uvRect: content.uvRect,
-			trimmedSize: content.trimmedSize,
-			pixelRect: content.pixelRect,
-			atlasPage: content.atlasPage,
-		};
-	});
-}
-
-// ─── Theme Asset Loading ───────────────────────────────────────────────────
-
-/** Result of loading all assets for a single theme */
-type ThemeAssets = {
-	theme: ThemeConfig;
-	segments: SegmentInfo[];
-	originalSegments: SegmentInfo[];
-	atlasTexture: Texture;
-	othersAtlasTexture: Texture | null;
-	kimonoTexture: Texture | null;
-	/** All textures to dispose on cleanup */
-	allTextures: Texture[];
-};
-
-function getThemeCategoryName(themeId: string): string | undefined {
+export function getThemeCategoryName(themeId: string): string | undefined {
 	return THEME_CATEGORY_NAMES[themeId as keyof typeof THEME_CATEGORY_NAMES];
-}
-
-/**
- * Load all assets for a given theme configuration.
- * Returns null if the layout manifest or atlas fails to load.
- */
-async function loadThemeAssets(
-	theme: ThemeConfig,
-	signal?: AbortSignal,
-): Promise<ThemeAssets | null> {
-	const textures: Texture[] = [];
-
-	// Load layout manifest (required)
-	const layoutManifest = await loadManifest(theme.layoutBasePath);
-	if (!layoutManifest || signal?.aborted) return null;
-
-	// Load content (others) manifest (optional)
-	const contentManifest = theme.contentBasePath
-		? await loadManifest(theme.contentBasePath)
-		: null;
-	if (signal?.aborted) return null;
-
-	const originalSegments = layoutManifest.segments;
-
-	// Merge content if available
-	let segments: SegmentInfo[];
-	if (contentManifest) {
-		segments = mergeSegmentsWithOthersContent(
-			layoutManifest.segments,
-			contentManifest.segments,
-		);
-	} else {
-		segments = layoutManifest.segments;
-	}
-
-	// Load layout atlas (required)
-	let atlasTexture: Texture;
-	try {
-		const loaded = await loadAtlasTextures(
-			layoutManifest,
-			`${theme.layoutBasePath}/atlas`,
-		);
-		if (signal?.aborted) return null;
-		textures.push(...loaded);
-		if (loaded.length === 0) return null;
-		atlasTexture = loaded[0];
-	} catch {
-		return null;
-	}
-
-	// Load others atlas (optional)
-	let othersAtlasTexture: Texture | null = null;
-	if (contentManifest && theme.contentBasePath) {
-		try {
-			const loaded = await loadAtlasTextures(
-				contentManifest,
-				`${theme.contentBasePath}/atlas`,
-			);
-			if (signal?.aborted) return null;
-			textures.push(...loaded);
-			if (loaded.length > 0) {
-				othersAtlasTexture = loaded[0];
-			}
-		} catch {
-			// Others atlas is optional — continue without it
-		}
-	}
-
-	// Load background image
-	let kimonoTexture: Texture | null = null;
-	try {
-		const loader = new TextureLoader();
-		const bgTex = await loader.loadAsync(theme.backgroundPath);
-		if (signal?.aborted) return null;
-		bgTex.colorSpace = SRGBColorSpace;
-		textures.push(bgTex);
-		kimonoTexture = bgTex;
-	} catch {
-		// Background is optional — continue without it
-	}
-
-	return {
-		theme,
-		segments,
-		originalSegments,
-		atlasTexture,
-		othersAtlasTexture,
-		kimonoTexture,
-		allTextures: textures,
-	};
 }
 
 // ─── Debug GUI ──────────────────────────────────────────────────────────────
@@ -590,7 +429,7 @@ function useDebugGui(): DebugGuiResult {
  * セグメントアニメーションの後ろに配置され（z=-0.1, renderOrder=-100）、
  * depthTest/depthWrite を無効にして常に最背面に描画される。
  */
-function KimonoBackground({
+export function KimonoBackground({
 	texture,
 	opacity,
 	bgDimRef,
@@ -1453,6 +1292,29 @@ function App() {
 					<color attach="background" args={["black"]} />
 					<OrbitControls />
 					<Scene statusRef={statusRef} />
+				</Canvas>
+			</div>
+			{/* Blue frame — sakura fixed loop (256x256, right-aligned below main) */}
+			<div
+				style={{
+					position: "absolute",
+					top: 512,
+					left: 256,
+					width: 256,
+					height: 256,
+				}}
+			>
+				<Canvas
+					orthographic
+					camera={{
+						position: [0, Y_CENTER_OFFSET, 50],
+						zoom: 5,
+						near: 0.1,
+						far: 200,
+					}}
+				>
+					<color attach="background" args={["black"]} />
+					<SakuraFixedScene />
 				</Canvas>
 			</div>
 			<StatusPanel statusRef={statusRef} />
