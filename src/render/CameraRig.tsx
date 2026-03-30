@@ -26,6 +26,8 @@ type CameraRigProps = {
   enabled?: boolean;
   /** Optional ref that overrides currentGen prop on every frame */
   currentGenRef?: React.RefObject<number>;
+  /** Multiplier for zoom levels (default 1.0). Use 0.5 to fit the same scene into half-size canvas. */
+  zoomScale?: number;
 };
 
 /**
@@ -44,6 +46,7 @@ export function CameraRig({
   layerSpacing,
   enabled = true,
   currentGenRef,
+  zoomScale = 1.0,
 }: CameraRigProps): null {
   const { camera } = useThree();
 
@@ -95,8 +98,8 @@ export function CameraRig({
       t,
     );
 
-    // Interpolate zoom
-    const targetZoom = MathUtils.lerp(TOP_DOWN_ZOOM, obliqueZoom, t);
+    // Interpolate zoom (scaled for smaller canvases)
+    const targetZoom = MathUtils.lerp(TOP_DOWN_ZOOM, obliqueZoom, t) * zoomScale;
 
     // Damped movement toward target for natural feel
     const dampFactor = 1 - Math.exp(-DAMP_RATE * delta);

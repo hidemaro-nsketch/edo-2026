@@ -1294,7 +1294,7 @@ function App() {
 					<Scene statusRef={statusRef} />
 				</Canvas>
 			</div>
-			{/* Blue frame — sakura fixed loop (256x256, right-aligned below main) */}
+			{/* Blue frame — sakura fixed loop (256x256, same visible area as main) */}
 			<div
 				style={{
 					position: "absolute",

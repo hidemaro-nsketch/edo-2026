@@ -210,6 +210,7 @@ function SakuraShuffleContent({
 				currentGenRef={currentLayerRef}
 				maxGenerations={system.plan.maxLayer}
 				layerSpacing={config.layerSpacing}
+				zoomScale={0.5}
 			/>
 			<SegmentMeshes
 				segments={segments}
