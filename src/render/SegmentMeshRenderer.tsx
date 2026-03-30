@@ -495,7 +495,7 @@ export type FrameRenderData = {
 	baseSegments: SegmentInfo[];
 	/** Settled instances grouped by layer index (1-based) */
 	settledByLayer: Map<number, SegmentRenderInstance[]>;
-	/** Active black fills (current swap) */
+	/** Active black fills for the current slot changes */
 	activeBlackFills: BlackFillRenderInstance[];
 	/** Committed black fills by layer */
 	committedBlackFills: Map<number, BlackFillRenderInstance[]>;

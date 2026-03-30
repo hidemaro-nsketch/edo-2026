@@ -32,8 +32,8 @@ import {
 	THEME_CATEGORY_NAMES,
 } from "../layered-shuffle/types";
 import { CameraRig, Y_CENTER_OFFSET } from "../render/CameraRig"; // レイヤー追従カメラ
-import { SakuraFixedScene } from "../render/SakuraFixedScene"; // 桜固定ループシーン
 import { ConnectionLines } from "../render/ConnectionLines"; // セグメント間の接続線描画
+import { SakuraFixedScene } from "../render/SakuraFixedScene"; // 桜固定ループシーン
 import { SegmentMeshes, type SwipeEffectParams } from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
 import { TransitionRenderer } from "../render/TransitionRenderer"; // テーマ転換描画
 import { KIMONO_SIZE } from "../sakura/constants";
@@ -70,8 +70,8 @@ type SceneStatus = {
 	phaseTime: number;
 	segmentCount: number;
 	loading: boolean;
-	/** Swap pairs for the current layer: [slotA, slotB][] */
-	activeSwaps: [number, number][];
+	/** Slot indices that change from old segment to new segment on the current layer */
+	activeChangedSlots: number[];
 	/** Slot→segment mapping at current layer */
 	slotMapping: number[];
 	/** Whether current layer uses "others" atlas */
@@ -122,7 +122,7 @@ type DebugGuiResult = {
 	sourceImageStartLayer: ShuffleConfig["sourceImageStartLayer"];
 	categoryBaseLayers: ShuffleConfig["categoryBaseLayers"];
 	categoryOthersLayers: ShuffleConfig["categoryOthersLayers"];
-	categorySwipePairCount: ShuffleConfig["categorySwipePairCount"];
+	categoryChangeSlotCount: ShuffleConfig["categoryChangeSlotCount"];
 	dimFadeInDuration: number;
 	dimFadeOutDuration: number;
 	dimHoldTime: number;
@@ -143,7 +143,7 @@ type DebugGuiResult = {
  *
  * - Opacity: 着物背景の透明度
  * - Animation: スワイプ（セグメント移動）の速度・ジッター・ホールド時間
- * - Layers: テーマごとの base / others レイヤー数、pair 数、レイヤー間の Z 軸間隔
+ * - Layers: テーマごとの base / others レイヤー数、変化slot数、レイヤー間の Z 軸間隔
  * - Collapse: コラプス（最終合体）アニメーションの速度・スタガー
  * - Actions: Reset ボタンでアニメーションを最初からやり直し
  */
@@ -253,26 +253,28 @@ function useDebugGui(): DebugGuiResult {
 			max: 4,
 			step: 0.1,
 		}, // レイヤー間の Z 軸距離
-		sakuraSwipePairs: {
-			value: DEFAULT_CONFIG.categorySwipePairCount[THEME_CATEGORY_NAMES.sakura],
+		sakuraChangeSlots: {
+			value:
+				DEFAULT_CONFIG.categoryChangeSlotCount[THEME_CATEGORY_NAMES.sakura],
 			min: 0,
 			max: 20,
 			step: 1,
 		},
-		umeSwipePairs: {
-			value: DEFAULT_CONFIG.categorySwipePairCount[THEME_CATEGORY_NAMES.ume],
+		umeChangeSlots: {
+			value: DEFAULT_CONFIG.categoryChangeSlotCount[THEME_CATEGORY_NAMES.ume],
 			min: 0,
 			max: 20,
 			step: 1,
 		},
-		fujiSwipePairs: {
-			value: DEFAULT_CONFIG.categorySwipePairCount[THEME_CATEGORY_NAMES.fuji],
+		fujiChangeSlots: {
+			value: DEFAULT_CONFIG.categoryChangeSlotCount[THEME_CATEGORY_NAMES.fuji],
 			min: 0,
 			max: 20,
 			step: 1,
 		},
-		momijiSwipePairs: {
-			value: DEFAULT_CONFIG.categorySwipePairCount[THEME_CATEGORY_NAMES.momiji],
+		momijiChangeSlots: {
+			value:
+				DEFAULT_CONFIG.categoryChangeSlotCount[THEME_CATEGORY_NAMES.momiji],
 			min: 0,
 			max: 20,
 			step: 1,
@@ -405,11 +407,11 @@ function useDebugGui(): DebugGuiResult {
 			[THEME_CATEGORY_NAMES.fuji]: layers.fujiOthersLayers,
 			[THEME_CATEGORY_NAMES.momiji]: layers.momijiOthersLayers,
 		},
-		categorySwipePairCount: {
-			[THEME_CATEGORY_NAMES.sakura]: layers.sakuraSwipePairs,
-			[THEME_CATEGORY_NAMES.ume]: layers.umeSwipePairs,
-			[THEME_CATEGORY_NAMES.fuji]: layers.fujiSwipePairs,
-			[THEME_CATEGORY_NAMES.momiji]: layers.momijiSwipePairs,
+		categoryChangeSlotCount: {
+			[THEME_CATEGORY_NAMES.sakura]: layers.sakuraChangeSlots,
+			[THEME_CATEGORY_NAMES.ume]: layers.umeChangeSlots,
+			[THEME_CATEGORY_NAMES.fuji]: layers.fujiChangeSlots,
+			[THEME_CATEGORY_NAMES.momiji]: layers.momijiChangeSlots,
 		},
 		contentStartLayer:
 			DEFAULT_CONFIG.categoryContentStartLayer[THEME_CATEGORY_NAMES.sakura],
@@ -512,7 +514,12 @@ function ShuffleContent({
 	const nextPlanSeedRef = useRef(INITIAL_PLAN_SEED);
 
 	const createNextPlan = () => {
-		const plan = compilePlan(segments, config, nextPlanSeedRef.current);
+		const plan = compilePlan(
+			segments,
+			config,
+			nextPlanSeedRef.current,
+			originalSegments,
+		);
 		nextPlanSeedRef.current += 1;
 		const themeCategoryName = getThemeCategoryName(themeId);
 		const themeMaxLayer = themeCategoryName
@@ -598,10 +605,10 @@ function ShuffleContent({
 
 			const plan = system.plan;
 			if (currentLayer >= 1 && currentLayer < plan.legsByLayer.length) {
-				s.activeSwaps = plan.swapsByLayer[currentLayer] ?? [];
+				s.activeChangedSlots = plan.changedSlotsByLayer[currentLayer] ?? [];
 				s.slotMapping = plan.mappingByLayer[currentLayer] ?? [];
 			} else {
-				s.activeSwaps = [];
+				s.activeChangedSlots = [];
 				s.slotMapping = [];
 			}
 		}
@@ -903,8 +910,8 @@ function Scene({
 			gui.categoryBaseLayers ?? DEFAULT_CONFIG.categoryBaseLayers;
 		const categoryOthersLayers =
 			gui.categoryOthersLayers ?? DEFAULT_CONFIG.categoryOthersLayers;
-		const categorySwipePairCount =
-			gui.categorySwipePairCount ?? DEFAULT_CONFIG.categorySwipePairCount;
+		const categoryChangeSlotCount =
+			gui.categoryChangeSlotCount ?? DEFAULT_CONFIG.categoryChangeSlotCount;
 		const categoryMaxLayer = Object.fromEntries(
 			Object.keys({ ...categoryBaseLayers, ...categoryOthersLayers }).map(
 				(key) => [
@@ -947,7 +954,7 @@ function Scene({
 			sourceImageStartLayer: DEFAULT_CONFIG.sourceImageStartLayer,
 			categoryBaseLayers,
 			categoryOthersLayers,
-			categorySwipePairCount,
+			categoryChangeSlotCount,
 			contentStartLayer: currentThemeCategoryName
 				? (categoryContentStartLayer[currentThemeCategoryName] ??
 					DEFAULT_CONFIG.contentStartLayer)
@@ -969,7 +976,7 @@ function Scene({
 		gui.holdAfterComplete,
 		gui.categoryBaseLayers,
 		gui.categoryOthersLayers,
-		gui.categorySwipePairCount,
+		gui.categoryChangeSlotCount,
 	]);
 
 	// Keep maxLayers in sync with GUI (per-theme total = base + others)
@@ -1125,7 +1132,7 @@ const INITIAL_STATUS: SceneStatus = {
 	phaseTime: 0,
 	segmentCount: 0,
 	loading: true,
-	activeSwaps: [],
+	activeChangedSlots: [],
 	slotMapping: [],
 	usingOthers: false,
 	othersSegIndices: new Set(),
@@ -1179,10 +1186,9 @@ function StatusPanel({
 			// Atlas source label
 			const atlasLabel = s.usingOthers ? "others" : "base";
 
-			// Active swaps: show slot pairs
-			const swapsLabel =
-				s.activeSwaps.length > 0
-					? s.activeSwaps.map(([a, b]) => `[${a}↔${b}]`).join(" ")
+			const changedSlotsLabel =
+				s.activeChangedSlots.length > 0
+					? s.activeChangedSlots.map((slot) => `[${slot}]`).join(" ")
 					: "---";
 
 			// Slot mapping: only show entries where slot !== segId.
@@ -1215,7 +1221,7 @@ function StatusPanel({
 				`<div style="margin-bottom:10px"><span style="color:#888">Segments:</span> <span style="color:#fff">${s.segmentCount}</span></div>` +
 				`<div style="margin-bottom:12px;font-size:14px;color:#888;letter-spacing:0.05em">ACTIVE LAYER</div>` +
 				`<div style="margin-bottom:6px"><span style="color:#888">Atlas:</span> <span style="color:${s.usingOthers ? "#e8a" : "#8ae"}">${atlasLabel}</span></div>` +
-				`<div style="margin-bottom:6px"><span style="color:#888">Swaps (slot):</span> <span style="color:#e8a">${swapsLabel}</span></div>` +
+				`<div style="margin-bottom:6px"><span style="color:#888">Changed Slots:</span> <span style="color:#e8a">${changedSlotsLabel}</span></div>` +
 				`<div style="margin-bottom:6px;word-break:break-all"><span style="color:#888">Slot→Seg:</span> <span style="font-size:11px">${mappingLabel}</span></div>`;
 
 			rafId = requestAnimationFrame(tick);

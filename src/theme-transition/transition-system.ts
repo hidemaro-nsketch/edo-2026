@@ -178,7 +178,7 @@ export class ThemeTransitionSystem {
 		this.config = { ...DEFAULT_TRANSITION_CONFIG, ...config };
 		// scatter-out: always down / gather-in: always from above
 		this.scatterDirection = [1, 0];
-		this.gatherDirection = [1, 0];
+		this.gatherDirection = [-1, 0];
 		this.oldSegments = oldSegments;
 		this.oldBasePositions = oldDisplayInstances?.length
 			? this.computePositionsFromInstances(oldDisplayInstances)

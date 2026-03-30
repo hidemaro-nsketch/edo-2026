@@ -88,25 +88,13 @@ function buildSegmentInstanceAtSlot(
 }
 
 function getDisplayedAtlasSelectionForSegmentAtLayer(
-	plan: CompiledPlan,
 	segId: number,
 	layer: number,
 	config: ShuffleConfig,
 	segments: SegmentInfo[],
 ): number {
 	if (layer < 1) return 0;
-	const lifecycle = plan.lifecycles[segId];
-	if (!lifecycle) return 0;
-
-	let lastSettleLayer = 0;
-	for (const leg of lifecycle.legs) {
-		if (leg.toLayer > layer) break;
-		if (leg.mode === "settle") {
-			lastSettleLayer = leg.toLayer;
-		}
-	}
-
-	return shouldUseOthersAtlas(segId, lastSettleLayer, segments, config);
+	return shouldUseOthersAtlas(segId, layer, segments, config);
 }
 
 export function buildBaseRenderInstances(
@@ -146,9 +134,8 @@ export function buildFinalDisplayInstances(
 	const catalogs = { originalSegments, mergedSegments };
 
 	for (let layer = 1; layer <= plan.maxLayer; layer++) {
-		for (const [slotA, slotB] of plan.swapsByLayer[layer] ?? []) {
-			lastChangedLayerBySlot[slotA] = layer;
-			lastChangedLayerBySlot[slotB] = layer;
+		for (const slot of plan.changedSlotsByLayer[layer] ?? []) {
+			lastChangedLayerBySlot[slot] = layer;
 		}
 	}
 
@@ -157,7 +144,12 @@ export function buildFinalDisplayInstances(
 		const mapping =
 			plan.mappingByLayer[displayLayer] ?? plan.mappingByLayer[0] ?? [];
 		const segId = mapping[slot] ?? slot;
-		const useOthersAtlas = shouldUseOthersAtlas(segId, displayLayer, originalSegments, config);
+		const useOthersAtlas = shouldUseOthersAtlas(
+			segId,
+			displayLayer,
+			originalSegments,
+			config,
+		);
 		return buildSegmentInstanceAtSlot(
 			catalogs,
 			segId,
@@ -176,28 +168,32 @@ export function buildSettledRenderInstancesForLayer(
 	config: ShuffleConfig,
 	layer: number,
 ): SegmentRenderInstance[] {
-	const swaps = plan.swapsByLayer[layer] ?? [];
-	if (swaps.length === 0) return [];
+	const changedSlots = plan.changedSlotsByLayer[layer] ?? [];
+	if (changedSlots.length === 0) return [];
 
 	const mapping = plan.mappingByLayer[layer];
 	const catalogs = { originalSegments, mergedSegments };
 	const instances: SegmentRenderInstance[] = [];
 
-	for (const [slotA, slotB] of swaps) {
-		for (const slot of [slotA, slotB]) {
-			const segId = mapping[slot];
-			const useOthersAtlas = shouldUseOthersAtlas(segId, layer, originalSegments, config);
-			instances.push(
-				buildSegmentInstanceAtSlot(
-					catalogs,
-					segId,
-					slot,
-					layer,
-					config,
-					useOthersAtlas,
-				),
-			);
-		}
+	for (const slot of changedSlots) {
+		const segId = mapping[slot];
+		if (segId == null) continue;
+		const useOthersAtlas = shouldUseOthersAtlas(
+			segId,
+			layer,
+			originalSegments,
+			config,
+		);
+		instances.push(
+			buildSegmentInstanceAtSlot(
+				catalogs,
+				segId,
+				slot,
+				layer,
+				config,
+				useOthersAtlas,
+			),
+		);
 	}
 
 	return instances;
@@ -219,7 +215,6 @@ export function buildBlackFillRenderInstancesForLayer(
 		h: entry.size[1],
 		sourceLayer: entry.sourceLayer,
 		useOthersAtlas: getDisplayedAtlasSelectionForSegmentAtLayer(
-			plan,
 			entry.segId,
 			entry.sourceLayer,
 			config,
@@ -246,9 +241,13 @@ export function buildSwipeRenderInstancesForLayer(
 
 		const oldSegId = prevMapping[leg.destSlot];
 		if (oldSegId == null) continue;
-		const nextUseOthersAtlas = shouldUseOthersAtlas(leg.segId, layer, originalSegments, config);
+		const nextUseOthersAtlas = shouldUseOthersAtlas(
+			leg.segId,
+			layer,
+			originalSegments,
+			config,
+		);
 		const oldUseOthersAtlas = getDisplayedAtlasSelectionForSegmentAtLayer(
-			plan,
 			oldSegId,
 			layer - 1,
 			config,
@@ -323,7 +322,12 @@ export function buildFlashRenderInstancesForLayer(
 	return (plan.legsByLayer[layer] ?? [])
 		.filter((leg) => leg.mode === "settle")
 		.map((leg) => {
-			const useOthersAtlas = shouldUseOthersAtlas(leg.segId, layer, originalSegments, config);
+			const useOthersAtlas = shouldUseOthersAtlas(
+				leg.segId,
+				layer,
+				originalSegments,
+				config,
+			);
 			return buildSegmentInstanceAtSlot(
 				catalogs,
 				leg.segId,
@@ -367,36 +371,41 @@ export function buildCollapseRenderInstances(
 	progress: number,
 ): SegmentRenderInstance[] {
 	const instances: SegmentRenderInstance[] = [];
-	const animatingSegIds = new Set<number>();
 	const catalogs = { originalSegments, mergedSegments };
+	const changedSlots = new Set<number>();
+	const activeChangedSlots = new Set(
+		plan.changedSlotsByLayer[collapsingLayer] ?? [],
+	);
+	const latestChangedLayerBySlot = new Map<number, number>();
 
-	const collapseLegs = plan.legsByLayer[collapsingLayer] ?? [];
-	for (const leg of collapseLegs) {
-		const lifecycle = plan.lifecycles[leg.segId];
-		if (lifecycle.settleLayer > collapsingLayer) continue;
-		animatingSegIds.add(leg.segId);
+	for (let layer = 1; layer <= collapsingLayer; layer++) {
+		for (const slot of plan.changedSlotsByLayer[layer] ?? []) {
+			changedSlots.add(slot);
+			latestChangedLayerBySlot.set(slot, layer);
+		}
+	}
+
+	for (const leg of plan.legsByLayer[collapsingLayer] ?? []) {
 		instances.push(interpolateLegReverse(leg, progress, config, catalogs));
 	}
 
-	for (const lifecycle of plan.lifecycles) {
-		if (lifecycle.settleLayer >= collapsingLayer) continue;
-		if (animatingSegIds.has(lifecycle.segId)) continue;
-		const settledLeg = lifecycle.legs.find(
-			(leg) => leg.toLayer === lifecycle.settleLayer,
-		);
-		if (!settledLeg) continue;
+	for (const slot of changedSlots) {
+		if (activeChangedSlots.has(slot)) continue;
+		const changedLayer = latestChangedLayerBySlot.get(slot) ?? -1;
+		if (changedLayer < 1 || changedLayer >= collapsingLayer) continue;
+		const segId = plan.mappingByLayer[changedLayer]?.[slot] ?? slot;
 		const useOthersAtlas = shouldUseOthersAtlas(
-			lifecycle.segId,
-			lifecycle.settleLayer,
+			segId,
+			changedLayer,
 			originalSegments,
 			config,
 		);
 		instances.push(
 			buildSegmentInstanceAtSlot(
 				catalogs,
-				lifecycle.segId,
-				settledLeg.destSlot,
-				lifecycle.settleLayer,
+				segId,
+				slot,
+				changedLayer,
 				config,
 				useOthersAtlas,
 			),
@@ -412,8 +421,18 @@ function interpolateLegReverse(
 	config: ShuffleConfig,
 	catalogs: SegmentCatalogs,
 ): SegmentRenderInstance {
-	const fromUseOthersAtlas = shouldUseOthersAtlas(leg.segId, leg.toLayer - 1, catalogs.originalSegments, config);
-	const toUseOthersAtlas = shouldUseOthersAtlas(leg.segId, leg.toLayer, catalogs.originalSegments, config);
+	const fromUseOthersAtlas = shouldUseOthersAtlas(
+		leg.segId,
+		leg.toLayer - 1,
+		catalogs.originalSegments,
+		config,
+	);
+	const toUseOthersAtlas = shouldUseOthersAtlas(
+		leg.segId,
+		leg.toLayer,
+		catalogs.originalSegments,
+		config,
+	);
 	const [fromW, fromH] = getContainedSizeForSlot(
 		catalogs,
 		leg.segId,

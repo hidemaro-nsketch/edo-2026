@@ -3,7 +3,7 @@
  *
  * Data structures for the layered shuffle system:
  *   - ShuffleConfig: animation timing & layout parameters
- *   - CompiledPlan: pre-computed shuffle sequence (swap pairs, flight legs, mappings)
+ *   - CompiledPlan: pre-computed shuffle sequence (slot changes, flight legs, mappings)
  *   - BuildState/BuildPhase: runtime state machine for the animation loop
  *
  * Data flow:
@@ -42,17 +42,17 @@ export type ShuffleConfig = {
 	dimHoldTime: number;
 	/** Duration in seconds to dim before swipe starts (0 = dim and swipe start together) */
 	dimLeadTime: number;
-	/** Minimum layer at which each category begins swapping (e.g. { sakura: 1, leaf: 4 }) */
+	/** Minimum layer at which each category begins slot changes (e.g. { sakura: 1, leaf: 4 }) */
 	categoryStartLayer: Record<string, number>;
-	/** Minimum layer at which each sourceImageId begins participating in swaps.
+	/** Minimum layer at which each sourceImageId begins participating in slot changes.
 	 *  Sources not listed default to 1 (always eligible). */
 	sourceImageStartLayer: Record<string, number>;
 	/** Number of layers rendered with the base atlas for each category/theme key. */
 	categoryBaseLayers: Record<string, number>;
 	/** Number of layers rendered with the others atlas after base layers for each key. */
 	categoryOthersLayers: Record<string, number>;
-	/** Number of swipe pairs to generate per category/theme key on each layer. */
-	categorySwipePairCount: Record<string, number>;
+	/** Number of slots to switch per category/theme key on each layer. */
+	categoryChangeSlotCount: Record<string, number>;
 	/** Derived current-category threshold where others atlas begins. */
 	contentStartLayer: number;
 	/** Derived total layer count per category/theme key. */
@@ -68,16 +68,13 @@ export const THEME_CATEGORY_NAMES = {
 	momiji: "momijibackground",
 } as const;
 
-/** A pair of slot indices to swap */
-export type SwapPair = [slotA: number, slotB: number];
-
 /** A single flight leg for one segment between two layers */
 export type SegmentLeg = {
 	/** Segment ID */
 	segId: number;
 	/** Layer this leg flies TO */
 	toLayer: number;
-	/** Mode: "pass" = same position, "settle" = new position (swapped) */
+	/** Mode: "pass" = same position, "settle" = same slot with new content */
 	mode: "pass" | "settle";
 	/** Source slot index on the previous layer */
 	fromSlot: number;
@@ -85,19 +82,8 @@ export type SegmentLeg = {
 	from: [number, number, number];
 	/** End position [x, y, z] */
 	to: [number, number, number];
-	/** Destination slot index at toLayer (pre-computed to avoid indexOf at runtime) */
+	/** Destination slot index at toLayer */
 	destSlot: number;
-};
-
-/** Full lifecycle of one segment across all layers */
-export type SegmentLifecycle = {
-	segId: number;
-	/** Layer where this segment first gets swapped (-1 if never) */
-	settleLayer: number;
-	/** Slot index where this segment ends up */
-	finalSlot: number;
-	/** Ordered list of legs (one per layer transition) */
-	legs: SegmentLeg[];
 };
 
 /** GPU-ready data for one segment quad (position, size, atlas selection, wipe state) */
@@ -127,7 +113,7 @@ export type BlackFillRenderInstance = {
 	useOthersAtlas: number;
 };
 
-/** A slot vacated by a segment moving away during a swap */
+/** A slot whose previous content is masked during a slot switch */
 export type VacatedSlot = {
 	/** Slot index that was vacated */
 	slotIndex: number;
@@ -143,17 +129,13 @@ export type VacatedSlot = {
 
 /** Pre-computed plan for the entire shuffle sequence */
 export type CompiledPlan = {
-	/** All segment lifecycles */
-	lifecycles: SegmentLifecycle[];
 	/** Legs grouped by target layer: legsByLayer[layerIdx] = legs flying TO that layer */
 	legsByLayer: SegmentLeg[][];
-	/** Segment IDs that settle at each layer */
-	settleIdsByLayer: number[][];
-	/** Swap pairs per layer (for ConnectionLines) */
-	swapsByLayer: SwapPair[][];
-	/** Slot-to-segment mapping at each layer (after all swaps applied) */
+	/** Slot indices whose displayed segment changed at each layer */
+	changedSlotsByLayer: number[][];
+	/** Slot-to-segment mapping at each layer after slot changes are applied */
 	mappingByLayer: number[][];
-	/** Slots vacated by swaps at each layer (black fill targets) */
+	/** Slots vacated by content switches at each layer (black fill targets) */
 	vacatedByLayer: VacatedSlot[][];
 	/** Effective maximum layer (max of maxGenerations and all categoryMaxLayer values) */
 	maxLayer: number;
@@ -163,7 +145,7 @@ export type CompiledPlan = {
 export type BuildPhase =
 	| "flash" // bbox wireframe flash before swipe
 	| "dimming" // pre-swipe dim (non-active slots fade before swipe starts)
-	| "swipe" // horizontal wipe transition for swapped slots
+	| "swipe" // horizontal wipe transition for changed slots
 	| "hold" // brief pause after swipe (commit happens inline at end)
 	| "complete" // all layers built
 	| "preCollapse" // pause while camera moves to oblique
@@ -235,11 +217,11 @@ export function getCategoryOthersLayerCount(
 	return normalizeLayerCount(config.categoryOthersLayers[categoryKey]);
 }
 
-export function getCategorySwipePairCount(
+export function getCategoryChangeSlotCount(
 	config: ShuffleConfig,
 	categoryKey: string,
 ): number {
-	return normalizeLayerCount(config.categorySwipePairCount[categoryKey], 2);
+	return normalizeLayerCount(config.categoryChangeSlotCount[categoryKey], 2);
 }
 
 export function getCategoryTotalLayerCount(
@@ -281,24 +263,24 @@ export function getEffectiveMaxLayer(
 
 /** Default configuration values */
 const DEFAULT_CATEGORY_BASE_LAYERS = {
-	[THEME_CATEGORY_NAMES.sakura]: 4,
+	[THEME_CATEGORY_NAMES.sakura]: 2,
 	[THEME_CATEGORY_NAMES.ume]: 1,
 	[THEME_CATEGORY_NAMES.fuji]: 0,
 	[THEME_CATEGORY_NAMES.momiji]: 3,
 };
 
 const DEFAULT_CATEGORY_OTHERS_LAYERS = {
-	[THEME_CATEGORY_NAMES.sakura]: 6,
+	[THEME_CATEGORY_NAMES.sakura]: 8,
 	[THEME_CATEGORY_NAMES.ume]: 3,
 	[THEME_CATEGORY_NAMES.fuji]: 2,
 	[THEME_CATEGORY_NAMES.momiji]: 3,
 };
 
-const DEFAULT_CATEGORY_SWIPE_PAIR_COUNT = {
-	[THEME_CATEGORY_NAMES.sakura]: 2,
-	[THEME_CATEGORY_NAMES.ume]: 1,
+const DEFAULT_CATEGORY_CHANGE_SLOT_COUNT = {
+	[THEME_CATEGORY_NAMES.sakura]: 4,
+	[THEME_CATEGORY_NAMES.ume]: 2,
 	[THEME_CATEGORY_NAMES.fuji]: 1,
-	[THEME_CATEGORY_NAMES.momiji]: 2,
+	[THEME_CATEGORY_NAMES.momiji]: 4,
 };
 
 const DEFAULT_CATEGORY_MAX_LAYERS = buildCategoryMaxLayer(
@@ -334,7 +316,7 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
 	},
 	categoryBaseLayers: DEFAULT_CATEGORY_BASE_LAYERS,
 	categoryOthersLayers: DEFAULT_CATEGORY_OTHERS_LAYERS,
-	categorySwipePairCount: DEFAULT_CATEGORY_SWIPE_PAIR_COUNT,
+	categoryChangeSlotCount: DEFAULT_CATEGORY_CHANGE_SLOT_COUNT,
 	contentStartLayer:
 		DEFAULT_CATEGORY_CONTENT_START_LAYERS[THEME_CATEGORY_NAMES.sakura],
 	categoryMaxLayer: DEFAULT_CATEGORY_MAX_LAYERS,

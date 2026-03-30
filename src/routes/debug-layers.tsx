@@ -156,7 +156,7 @@ function drawSegmentAtSlot(
  *   3. For each layer 1..N (bottom to top):
  *      a. Black fills — cover vacated slots on the immediately previous layer
  *      b. Settled segments — swapped segments at their new positions
- *   4. Debug overlays (slot boundaries, swap highlights, labels)
+ *   4. Debug overlays (slot boundaries, changed-slot highlights, labels)
  */
 function drawLayer(
 	ctx: CanvasRenderingContext2D,
@@ -221,7 +221,7 @@ function drawLayer(
 			ctx.strokeRect(bfX - bfW / 2, bfY - bfH / 2, bfW, bfH);
 		}
 
-		// 3b. Settled segments — only swapped segments at their new positions
+		// 3b. Settled segments — only changed slots at their new positions
 		const settled = buildSettledRenderInstancesForLayer(
 			plan,
 			layoutSegments,
@@ -229,10 +229,18 @@ function drawLayer(
 			DEFAULT_CONFIG,
 			l,
 		);
-		for (const instance of settled) {
-			const slot = plan.mappingByLayer[l].indexOf(instance.segId);
-			if (slot < 0) continue;
-			const useOthers = shouldUseOthersAtlas(instance.segId, l, originalSegments, DEFAULT_CONFIG) > 0;
+		const changedSlotsForLayer = plan.changedSlotsByLayer[l] ?? [];
+		for (let index = 0; index < settled.length; index++) {
+			const instance = settled[index];
+			const slot = changedSlotsForLayer[index];
+			if (slot == null) continue;
+			const useOthers =
+				shouldUseOthersAtlas(
+					instance.segId,
+					l,
+					originalSegments,
+					DEFAULT_CONFIG,
+				) > 0;
 			drawSegmentAtSlot(
 				ctx,
 				instance.segId,
@@ -250,12 +258,11 @@ function drawLayer(
 	// ── 4. Debug overlays ──
 	const currentMapping = plan.mappingByLayer[layer];
 
-	// Slot boundaries (yellow) + swap highlights (cyan/magenta)
-	const swappedSlots = new Set<number>();
+	// Slot boundaries (yellow) + changed-slot highlights (cyan/magenta)
+	const changedSlots = new Set<number>();
 	if (layer > 0) {
-		for (const [slotA, slotB] of plan.swapsByLayer[layer]) {
-			swappedSlots.add(slotA);
-			swappedSlots.add(slotB);
+		for (const slot of plan.changedSlotsByLayer[layer] ?? []) {
+			changedSlots.add(slot);
 		}
 	}
 
@@ -267,15 +274,17 @@ function drawLayer(
 		ctx.lineWidth = 0.5;
 		ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
 
-		// Highlight swapped slots at this layer
-		if (swappedSlots.has(slot)) {
+		// Highlight changed slots at this layer
+		if (changedSlots.has(slot)) {
 			ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
 			ctx.lineWidth = 1.5;
 			ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
 
 			// Contained size boundary (magenta)
 			const segId = currentMapping[slot];
-			const useOthers = shouldUseOthersAtlas(segId, layer, originalSegments, DEFAULT_CONFIG) > 0;
+			const useOthers =
+				shouldUseOthersAtlas(segId, layer, originalSegments, DEFAULT_CONFIG) >
+				0;
 			const seg = useOthers ? mergedSegments[segId] : originalSegments[segId];
 			const contentW = useOthers ? seg.trimmedSize[0] : seg.bboxInSource[2];
 			const contentH = useOthers ? seg.trimmedSize[1] : seg.bboxInSource[3];
@@ -287,7 +296,8 @@ function drawLayer(
 	}
 
 	// Layer label — show "others" if any category uses others at this layer
-	const useOthers = layer >= contentStartLayer ||
+	const useOthers =
+		layer >= contentStartLayer ||
 		Object.values(DEFAULT_CONFIG.categoryContentStartLayer).some(
 			(start) => layer >= start,
 		);
@@ -295,16 +305,16 @@ function drawLayer(
 	ctx.font = "bold 14px monospace";
 	ctx.fillText(`Layer ${layer}${useOthers ? " (others)" : " (sakura)"}`, 8, 20);
 
-	// Swap info
+	// Slot change info
 	if (layer > 0) {
-		const swaps = plan.swapsByLayer[layer];
+		const slots = plan.changedSlotsByLayer[layer] ?? [];
 		ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
 		ctx.font = "11px monospace";
-		ctx.fillText(`Swaps: ${swaps.length}`, 8, 36);
-		for (let i = 0; i < Math.min(swaps.length, 5); i++) {
-			const [a, b] = swaps[i];
+		ctx.fillText(`Changed slots: ${slots.length}`, 8, 36);
+		for (let i = 0; i < Math.min(slots.length, 5); i++) {
+			const slot = slots[i];
 			ctx.fillText(
-				`  slot ${a}(seg${currentMapping[a]}) \u2194 slot ${b}(seg${currentMapping[b]})`,
+				`  slot ${slot}(seg${currentMapping[slot]})`,
 				8,
 				50 + i * 14,
 			);
@@ -369,7 +379,12 @@ function DebugLayersPage() {
 			// Compile plan
 			const config = DEFAULT_CONFIG;
 			const DEBUG_SEED = 42;
-			const plan = compilePlan(mergedSegments, config, DEBUG_SEED);
+			const plan = compilePlan(
+				mergedSegments,
+				config,
+				DEBUG_SEED,
+				originalSegments,
+			);
 
 			const effectiveMax = getEffectiveMaxLayer(config);
 			setStatus(
@@ -438,7 +453,7 @@ function DebugLayersPage() {
 				<strong>Debug: Layer Segments</strong> | {status}
 				<br />
 				<span style={{ color: "#888", fontSize: "11px" }}>
-					Yellow = slot boundary | Cyan = swapped at this layer | Magenta =
+					Yellow = slot boundary | Cyan = changed at this layer | Magenta =
 					contained size | Red = black fill (vacated) | Pink border = others
 					atlas layer
 				</span>

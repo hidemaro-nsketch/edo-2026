@@ -93,8 +93,7 @@ function SakuraShuffleContent({
 			Object.keys({ ...categoryBaseLayers, ...categoryOthersLayers }).map(
 				(key) => [
 					key,
-					(categoryBaseLayers[key] ?? 0) +
-						(categoryOthersLayers[key] ?? 0),
+					(categoryBaseLayers[key] ?? 0) + (categoryOthersLayers[key] ?? 0),
 				],
 			),
 		);
@@ -127,7 +126,12 @@ function SakuraShuffleContent({
 	const nextPlanSeedRef = useRef(PLAN_SEED);
 
 	const createNextPlan = () => {
-		const plan = compilePlan(segments, config, nextPlanSeedRef.current);
+		const plan = compilePlan(
+			segments,
+			config,
+			nextPlanSeedRef.current,
+			originalSegments,
+		);
 		nextPlanSeedRef.current += 1;
 		const themeCategoryName = getThemeCategoryName("sakura");
 		const themeMaxLayer = themeCategoryName
