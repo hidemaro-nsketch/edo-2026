@@ -24,7 +24,13 @@ import type * as THREE from "three";
 import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system"; // シャッフルアニメーションの状態管理エンジン
 import { compilePlan } from "../layered-shuffle/compiled-plan"; // セグメント＋設定 → 実行プランへ変換
-import { type BlackFillRenderInstance, DEFAULT_CONFIG, getEffectiveMaxLayer, type ShuffleConfig } from "../layered-shuffle/types";
+import {
+	type BlackFillRenderInstance,
+	DEFAULT_CONFIG,
+	getCategoryTotalLayerCount,
+	type ShuffleConfig,
+	THEME_CATEGORY_NAMES,
+} from "../layered-shuffle/types";
 import { CameraRig, Y_CENTER_OFFSET } from "../render/CameraRig"; // レイヤー追従カメラ
 import { ConnectionLines } from "../render/ConnectionLines"; // セグメント間の接続線描画
 import { SegmentMeshes, type SwipeEffectParams } from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
@@ -151,6 +157,10 @@ type ThemeAssets = {
 	allTextures: Texture[];
 };
 
+function getThemeCategoryName(themeId: string): string | undefined {
+	return THEME_CATEGORY_NAMES[themeId as keyof typeof THEME_CATEGORY_NAMES];
+}
+
 /**
  * Load all assets for a given theme configuration.
  * Returns null if the layout manifest or atlas fails to load.
@@ -257,8 +267,30 @@ export type DebugControls = {
 	setMonitorRef: React.RefObject<(values: Record<string, unknown>) => void>;
 };
 
-/** useDebugGui の戻り値型。ShuffleConfig + 背景透明度 + リセットトリガー + デバッグコントロール */
-type DebugGuiResult = ShuffleConfig & {
+/** useDebugGui の戻り値型。GUI 入力値 + 補助 state */
+type DebugGuiResult = {
+	flashCount: number;
+	flashOnDuration: number;
+	flashOffDuration: number;
+	swipeDuration: number;
+	swipeDurationJitter: number;
+	holdDuration: number;
+	layerSpacing: number;
+	collapseDuration: number;
+	collapseStagger: number;
+	holdAfterComplete: number;
+	categoryStartLayer: ShuffleConfig["categoryStartLayer"];
+	sourceImageStartLayer: ShuffleConfig["sourceImageStartLayer"];
+	categoryBaseLayers: ShuffleConfig["categoryBaseLayers"];
+	categoryOthersLayers: ShuffleConfig["categoryOthersLayers"];
+	categorySwipePairCount: ShuffleConfig["categorySwipePairCount"];
+	dimFadeInDuration: number;
+	dimFadeOutDuration: number;
+	dimHoldTime: number;
+	dimLeadTime: number;
+	contentStartLayer: number;
+	categoryMaxLayer: ShuffleConfig["categoryMaxLayer"];
+	categoryContentStartLayer: ShuffleConfig["categoryContentStartLayer"];
 	bgOpacity: number;
 	resetTrigger: number;
 	debugControls: DebugControls;
@@ -272,7 +304,7 @@ type DebugGuiResult = ShuffleConfig & {
  *
  * - Opacity: 着物背景の透明度
  * - Animation: スワイプ（セグメント移動）の速度・ジッター・ホールド時間
- * - Layers: 最大レイヤー数、レイヤー間の Z 軸間隔
+ * - Layers: テーマごとの base / others レイヤー数、pair 数、レイヤー間の Z 軸間隔
  * - Collapse: コラプス（最終合体）アニメーションの速度・スタガー
  * - Actions: Reset ボタンでアニメーションを最初からやり直し
  */
@@ -328,24 +360,84 @@ function useDebugGui(): DebugGuiResult {
 
 	// レイヤー構成の設定
 	const layers = useControls("Layers", {
-		maxGenerations: {
-			value: DEFAULT_CONFIG.maxGenerations,
+		sakuraBaseLayers: {
+			value: DEFAULT_CONFIG.categoryBaseLayers[THEME_CATEGORY_NAMES.sakura],
 			min: 1,
 			max: 20,
 			step: 1,
-		}, // シャッフルの世代数（レイヤー数）
+		},
+		sakuraOthersLayers: {
+			value: DEFAULT_CONFIG.categoryOthersLayers[THEME_CATEGORY_NAMES.sakura],
+			min: 0,
+			max: 20,
+			step: 1,
+		},
+		umeBaseLayers: {
+			value: DEFAULT_CONFIG.categoryBaseLayers[THEME_CATEGORY_NAMES.ume],
+			min: 1,
+			max: 20,
+			step: 1,
+		},
+		umeOthersLayers: {
+			value: DEFAULT_CONFIG.categoryOthersLayers[THEME_CATEGORY_NAMES.ume],
+			min: 0,
+			max: 20,
+			step: 1,
+		},
+		fujiBaseLayers: {
+			value: DEFAULT_CONFIG.categoryBaseLayers[THEME_CATEGORY_NAMES.fuji],
+			min: 1,
+			max: 20,
+			step: 1,
+		},
+		fujiOthersLayers: {
+			value: DEFAULT_CONFIG.categoryOthersLayers[THEME_CATEGORY_NAMES.fuji],
+			min: 0,
+			max: 20,
+			step: 1,
+		},
+		momijiBaseLayers: {
+			value: DEFAULT_CONFIG.categoryBaseLayers[THEME_CATEGORY_NAMES.momiji],
+			min: 1,
+			max: 20,
+			step: 1,
+		},
+		momijiOthersLayers: {
+			value: DEFAULT_CONFIG.categoryOthersLayers[THEME_CATEGORY_NAMES.momiji],
+			min: 0,
+			max: 20,
+			step: 1,
+		},
 		layerSpacing: {
 			value: DEFAULT_CONFIG.layerSpacing,
 			min: 0.1,
 			max: 4,
 			step: 0.1,
 		}, // レイヤー間の Z 軸距離
-		contentStartLayer: {
-			value: DEFAULT_CONFIG.contentStartLayer,
-			min: 1,
+		sakuraSwipePairs: {
+			value: DEFAULT_CONFIG.categorySwipePairCount[THEME_CATEGORY_NAMES.sakura],
+			min: 0,
 			max: 20,
 			step: 1,
-		}, // othersアトラスを使い始めるレイヤー
+		},
+		umeSwipePairs: {
+			value: DEFAULT_CONFIG.categorySwipePairCount[THEME_CATEGORY_NAMES.ume],
+			min: 0,
+			max: 20,
+			step: 1,
+		},
+		fujiSwipePairs: {
+			value: DEFAULT_CONFIG.categorySwipePairCount[THEME_CATEGORY_NAMES.fuji],
+			min: 0,
+			max: 20,
+			step: 1,
+		},
+		momijiSwipePairs: {
+			value: DEFAULT_CONFIG.categorySwipePairCount[THEME_CATEGORY_NAMES.momiji],
+			min: 0,
+			max: 20,
+			step: 1,
+		},
 	});
 
 	// コラプスフェーズ（全レイヤーが最終位置に収束）の設定
@@ -462,7 +554,26 @@ function useDebugGui(): DebugGuiResult {
 		dimLeadTime: DEFAULT_CONFIG.dimLeadTime,
 		categoryStartLayer: DEFAULT_CONFIG.categoryStartLayer,
 		sourceImageStartLayer: DEFAULT_CONFIG.sourceImageStartLayer,
-		contentStartLayer: layers.contentStartLayer,
+		categoryBaseLayers: {
+			[THEME_CATEGORY_NAMES.sakura]: layers.sakuraBaseLayers,
+			[THEME_CATEGORY_NAMES.ume]: layers.umeBaseLayers,
+			[THEME_CATEGORY_NAMES.fuji]: layers.fujiBaseLayers,
+			[THEME_CATEGORY_NAMES.momiji]: layers.momijiBaseLayers,
+		},
+		categoryOthersLayers: {
+			[THEME_CATEGORY_NAMES.sakura]: layers.sakuraOthersLayers,
+			[THEME_CATEGORY_NAMES.ume]: layers.umeOthersLayers,
+			[THEME_CATEGORY_NAMES.fuji]: layers.fujiOthersLayers,
+			[THEME_CATEGORY_NAMES.momiji]: layers.momijiOthersLayers,
+		},
+		categorySwipePairCount: {
+			[THEME_CATEGORY_NAMES.sakura]: layers.sakuraSwipePairs,
+			[THEME_CATEGORY_NAMES.ume]: layers.umeSwipePairs,
+			[THEME_CATEGORY_NAMES.fuji]: layers.fujiSwipePairs,
+			[THEME_CATEGORY_NAMES.momiji]: layers.momijiSwipePairs,
+		},
+		contentStartLayer:
+			DEFAULT_CONFIG.categoryContentStartLayer[THEME_CATEGORY_NAMES.sakura],
 		categoryMaxLayer: DEFAULT_CONFIG.categoryMaxLayer,
 		categoryContentStartLayer: DEFAULT_CONFIG.categoryContentStartLayer,
 		resetTrigger,
@@ -518,6 +629,7 @@ function KimonoBackground({
 type ShuffleContentProps = {
 	segments: SegmentInfo[];
 	originalSegments: SegmentInfo[];
+	themeId: string;
 	atlasTexture: Texture;
 	othersAtlasTexture: Texture | null;
 	config: ShuffleConfig;
@@ -545,6 +657,7 @@ type ShuffleContentProps = {
 function ShuffleContent({
 	segments,
 	originalSegments,
+	themeId,
 	atlasTexture,
 	othersAtlasTexture,
 	config,
@@ -562,10 +675,12 @@ function ShuffleContent({
 	const createNextPlan = () => {
 		const plan = compilePlan(segments, config, nextPlanSeedRef.current);
 		nextPlanSeedRef.current += 1;
-		// Clamp plan.maxLayer to the current theme's categoryMaxLayer (if set)
-		const themeCat = segments[0]?.categoryName;
-		if (themeCat && config.categoryMaxLayer[themeCat] != null) {
-			plan.maxLayer = config.categoryMaxLayer[themeCat];
+		const themeCategoryName = getThemeCategoryName(themeId);
+		const themeMaxLayer = themeCategoryName
+			? config.categoryMaxLayer[themeCategoryName]
+			: undefined;
+		if (themeMaxLayer != null) {
+			plan.maxLayer = themeMaxLayer;
 		}
 		return plan;
 	};
@@ -632,14 +747,15 @@ function ShuffleContent({
 		if (statusRef) {
 			const s = statusRef.current;
 			const { phase, currentLayer } = system.state;
+			const themeCategoryName = getThemeCategoryName(themeId);
+			const contentStartLayer = themeCategoryName
+				? config.categoryContentStartLayer[themeCategoryName]
+				: config.contentStartLayer;
 			s.phase = phase;
 			s.currentLayer = currentLayer;
 			s.phaseTime = system.state.phaseTime;
 
-			s.usingOthers = currentLayer >= config.contentStartLayer ||
-				Object.values(config.categoryContentStartLayer).some(
-					(start) => currentLayer >= start,
-				);
+			s.usingOthers = currentLayer >= contentStartLayer;
 
 			const plan = system.plan;
 			if (currentLayer >= 1 && currentLayer < plan.legsByLayer.length) {
@@ -665,7 +781,6 @@ function ShuffleContent({
 				originalSegments={originalSegments}
 				atlasTexture={atlasTexture}
 				othersAtlasTexture={othersAtlasTexture}
-				contentStartLayer={config.contentStartLayer}
 				buildSystem={system}
 				debugControls={debugControls}
 				swipeEffect={swipeEffect}
@@ -731,7 +846,7 @@ function CameraAndLifecycle({
 
 		// 現在レイヤーを ref 経由で CameraRig に伝達（setState を避けてパフォーマンス維持）
 		// Collapse disabled: カメラは常に top-down を維持（oblique 遷移しない）
-		const effectiveMaxLayer = getEffectiveMaxLayer(config);
+		const effectiveMaxLayer = buildSystem.plan.maxLayer;
 		currentLayerRef.current = Math.min(
 			buildSystem.state.currentLayer,
 			effectiveMaxLayer - 1,
@@ -742,7 +857,7 @@ function CameraAndLifecycle({
 		<CameraRig
 			currentGen={1}
 			currentGenRef={currentLayerRef}
-			maxGenerations={getEffectiveMaxLayer(config)}
+			maxGenerations={buildSystem.plan.maxLayer}
 			layerSpacing={config.layerSpacing}
 		/>
 	);
@@ -941,9 +1056,38 @@ function Scene({
 	}).current;
 
 	// GUI の値を ShuffleConfig 型に変換
-	const config: ShuffleConfig = useMemo(
-		() => ({
-			maxGenerations: gui.maxGenerations ?? DEFAULT_CONFIG.maxGenerations,
+	const config: ShuffleConfig = useMemo(() => {
+		const currentThemeCategoryName = getThemeCategoryName(
+			statusRef.current.themeId,
+		);
+		const categoryBaseLayers =
+			gui.categoryBaseLayers ?? DEFAULT_CONFIG.categoryBaseLayers;
+		const categoryOthersLayers =
+			gui.categoryOthersLayers ?? DEFAULT_CONFIG.categoryOthersLayers;
+		const categorySwipePairCount =
+			gui.categorySwipePairCount ?? DEFAULT_CONFIG.categorySwipePairCount;
+		const categoryMaxLayer = Object.fromEntries(
+			Object.keys({ ...categoryBaseLayers, ...categoryOthersLayers }).map(
+				(key) => [
+					key,
+					(categoryBaseLayers[key] ?? 0) + (categoryOthersLayers[key] ?? 0),
+				],
+			),
+		);
+		const categoryContentStartLayer = Object.fromEntries(
+			Object.keys({ ...categoryBaseLayers, ...categoryOthersLayers }).map(
+				(key) => [
+					key,
+					(categoryOthersLayers[key] ?? 0) > 0
+						? (categoryBaseLayers[key] ?? 0) + 1
+						: (categoryBaseLayers[key] ?? 0) +
+							(categoryOthersLayers[key] ?? 0) +
+							1,
+				],
+			),
+		);
+		return {
+			maxGenerations: Math.max(...Object.values(categoryMaxLayer), 1),
 			flashCount: gui.flashCount ?? DEFAULT_CONFIG.flashCount,
 			flashOnDuration: gui.flashOnDuration ?? DEFAULT_CONFIG.flashOnDuration,
 			flashOffDuration: gui.flashOffDuration ?? DEFAULT_CONFIG.flashOffDuration,
@@ -962,35 +1106,40 @@ function Scene({
 			dimLeadTime: DEFAULT_CONFIG.dimLeadTime,
 			categoryStartLayer: DEFAULT_CONFIG.categoryStartLayer,
 			sourceImageStartLayer: DEFAULT_CONFIG.sourceImageStartLayer,
-			contentStartLayer:
-				gui.contentStartLayer ?? DEFAULT_CONFIG.contentStartLayer,
-			categoryMaxLayer: gui.categoryMaxLayer ?? DEFAULT_CONFIG.categoryMaxLayer,
-			categoryContentStartLayer:
-				gui.categoryContentStartLayer ??
-				DEFAULT_CONFIG.categoryContentStartLayer,
-		}),
-		[
-			gui.maxGenerations,
-			gui.flashCount,
-			gui.flashOnDuration,
-			gui.flashOffDuration,
-			gui.swipeDuration,
-			gui.swipeDurationJitter,
-			gui.holdDuration,
-			gui.layerSpacing,
-			gui.collapseDuration,
-			gui.collapseStagger,
-			gui.holdAfterComplete,
-			gui.contentStartLayer,
-			gui.categoryMaxLayer,
-			gui.categoryContentStartLayer,
-		],
-	);
+			categoryBaseLayers,
+			categoryOthersLayers,
+			categorySwipePairCount,
+			contentStartLayer: currentThemeCategoryName
+				? (categoryContentStartLayer[currentThemeCategoryName] ??
+					DEFAULT_CONFIG.contentStartLayer)
+				: DEFAULT_CONFIG.contentStartLayer,
+			categoryMaxLayer,
+			categoryContentStartLayer,
+		};
+	}, [
+		statusRef.current.themeId,
+		gui.flashCount,
+		gui.flashOnDuration,
+		gui.flashOffDuration,
+		gui.swipeDuration,
+		gui.swipeDurationJitter,
+		gui.holdDuration,
+		gui.layerSpacing,
+		gui.collapseDuration,
+		gui.collapseStagger,
+		gui.holdAfterComplete,
+		gui.categoryBaseLayers,
+		gui.categoryOthersLayers,
+		gui.categorySwipePairCount,
+	]);
 
-	// Keep maxLayers in sync with GUI (per-theme category max)
+	// Keep maxLayers in sync with GUI (per-theme total = base + others)
 	const currentThemeId = statusRef.current.themeId;
+	const currentCategoryName = getThemeCategoryName(currentThemeId);
 	statusRef.current.maxLayers =
-		config.categoryMaxLayer[currentThemeId] ?? config.maxGenerations;
+		currentCategoryName != null
+			? getCategoryTotalLayerCount(config, currentCategoryName)
+			: config.maxGenerations;
 
 	// Background dim factor: updated per-frame by ShuffleContent
 	const bgDimRef = useRef(1.0);
@@ -1015,6 +1164,7 @@ function Scene({
 					key={currentAssets.theme.id}
 					segments={currentAssets.segments}
 					originalSegments={currentAssets.originalSegments}
+					themeId={currentAssets.theme.id}
 					atlasTexture={currentAssets.atlasTexture}
 					othersAtlasTexture={currentAssets.othersAtlasTexture}
 					config={config}

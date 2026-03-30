@@ -12,7 +12,7 @@
 
 /** Configuration for the layered shuffle system */
 export type ShuffleConfig = {
-	/** Maximum number of shuffle generations */
+	/** Derived total layer count for the active plan */
 	maxGenerations: number;
 	/** Number of bbox flash cycles before swipe (0 to disable) */
 	flashCount: number;
@@ -47,14 +47,26 @@ export type ShuffleConfig = {
 	/** Minimum layer at which each sourceImageId begins participating in swaps.
 	 *  Sources not listed default to 1 (always eligible). */
 	sourceImageStartLayer: Record<string, number>;
-	/** Minimum layer at which "others" atlas content is used for rendering.
-	 *  Layers below this threshold render with the original (layout) atlas. */
+	/** Number of layers rendered with the base atlas for each category/theme key. */
+	categoryBaseLayers: Record<string, number>;
+	/** Number of layers rendered with the others atlas after base layers for each key. */
+	categoryOthersLayers: Record<string, number>;
+	/** Number of swipe pairs to generate per category/theme key on each layer. */
+	categorySwipePairCount: Record<string, number>;
+	/** Derived current-category threshold where others atlas begins. */
 	contentStartLayer: number;
-	/** Per-category maximum layer count. Categories not listed fall back to maxGenerations. */
+	/** Derived total layer count per category/theme key. */
 	categoryMaxLayer: Record<string, number>;
-	/** Per-category content start layer. Categories not listed fall back to contentStartLayer. */
+	/** Derived per-category threshold where others atlas begins. */
 	categoryContentStartLayer: Record<string, number>;
 };
+
+export const THEME_CATEGORY_NAMES = {
+	sakura: "sakurabackground",
+	ume: "umebackground",
+	fuji: "fujibackground",
+	momiji: "momijibackground",
+} as const;
 
 /** A pair of slot indices to swap */
 export type SwapPair = [slotA: number, slotB: number];
@@ -169,20 +181,138 @@ export type BuildState = {
 	phaseTime: number;
 };
 
+function normalizeLayerCount(value: number | undefined, fallback = 0): number {
+	if (value == null || !Number.isFinite(value)) return fallback;
+	return Math.max(0, Math.floor(value));
+}
+
+function getCategoryKeys(
+	baseLayers: Record<string, number>,
+	othersLayers: Record<string, number>,
+): string[] {
+	return Array.from(
+		new Set([...Object.keys(baseLayers), ...Object.keys(othersLayers)]),
+	);
+}
+
+function buildCategoryMaxLayer(
+	baseLayers: Record<string, number>,
+	othersLayers: Record<string, number>,
+): Record<string, number> {
+	const result: Record<string, number> = {};
+	for (const key of getCategoryKeys(baseLayers, othersLayers)) {
+		result[key] =
+			normalizeLayerCount(baseLayers[key]) +
+			normalizeLayerCount(othersLayers[key]);
+	}
+	return result;
+}
+
+function buildCategoryContentStartLayer(
+	baseLayers: Record<string, number>,
+	othersLayers: Record<string, number>,
+): Record<string, number> {
+	const result: Record<string, number> = {};
+	for (const key of getCategoryKeys(baseLayers, othersLayers)) {
+		const baseCount = normalizeLayerCount(baseLayers[key]);
+		const othersCount = normalizeLayerCount(othersLayers[key]);
+		result[key] = othersCount > 0 ? baseCount + 1 : baseCount + othersCount + 1;
+	}
+	return result;
+}
+
+export function getCategoryBaseLayerCount(
+	config: ShuffleConfig,
+	categoryKey: string,
+): number {
+	return normalizeLayerCount(config.categoryBaseLayers[categoryKey]);
+}
+
+export function getCategoryOthersLayerCount(
+	config: ShuffleConfig,
+	categoryKey: string,
+): number {
+	return normalizeLayerCount(config.categoryOthersLayers[categoryKey]);
+}
+
+export function getCategorySwipePairCount(
+	config: ShuffleConfig,
+	categoryKey: string,
+): number {
+	return normalizeLayerCount(config.categorySwipePairCount[categoryKey], 2);
+}
+
+export function getCategoryTotalLayerCount(
+	config: ShuffleConfig,
+	categoryKey: string,
+): number {
+	const derived =
+		getCategoryBaseLayerCount(config, categoryKey) +
+		getCategoryOthersLayerCount(config, categoryKey);
+	if (derived > 0) return derived;
+	return normalizeLayerCount(
+		config.categoryMaxLayer[categoryKey],
+		normalizeLayerCount(config.maxGenerations),
+	);
+}
+
 /**
- * Compute the effective maximum layer across all categories.
- * This is `max(maxGenerations, ...Object.values(categoryMaxLayer))`.
- * Used as the loop upper bound for plan compilation and runtime iteration.
+ * Compute the effective maximum layer across the provided categories.
+ * If no category keys are given, all configured categories are considered.
  */
-export function getEffectiveMaxLayer(config: ShuffleConfig): number {
-	const categoryValues = Object.values(config.categoryMaxLayer);
-	if (categoryValues.length === 0) return config.maxGenerations;
-	return Math.max(config.maxGenerations, ...categoryValues);
+export function getEffectiveMaxLayer(
+	config: ShuffleConfig,
+	categoryKeys?: Iterable<string>,
+): number {
+	const keys = categoryKeys
+		? Array.from(new Set(categoryKeys))
+		: Array.from(
+				new Set([
+					...Object.keys(config.categoryBaseLayers),
+					...Object.keys(config.categoryOthersLayers),
+					...Object.keys(config.categoryMaxLayer),
+				]),
+			);
+	if (keys.length === 0) return normalizeLayerCount(config.maxGenerations);
+	return Math.max(
+		...keys.map((key) => getCategoryTotalLayerCount(config, key)),
+	);
 }
 
 /** Default configuration values */
+const DEFAULT_CATEGORY_BASE_LAYERS = {
+	[THEME_CATEGORY_NAMES.sakura]: 4,
+	[THEME_CATEGORY_NAMES.ume]: 1,
+	[THEME_CATEGORY_NAMES.fuji]: 0,
+	[THEME_CATEGORY_NAMES.momiji]: 3,
+};
+
+const DEFAULT_CATEGORY_OTHERS_LAYERS = {
+	[THEME_CATEGORY_NAMES.sakura]: 6,
+	[THEME_CATEGORY_NAMES.ume]: 3,
+	[THEME_CATEGORY_NAMES.fuji]: 2,
+	[THEME_CATEGORY_NAMES.momiji]: 3,
+};
+
+const DEFAULT_CATEGORY_SWIPE_PAIR_COUNT = {
+	[THEME_CATEGORY_NAMES.sakura]: 2,
+	[THEME_CATEGORY_NAMES.ume]: 1,
+	[THEME_CATEGORY_NAMES.fuji]: 1,
+	[THEME_CATEGORY_NAMES.momiji]: 2,
+};
+
+const DEFAULT_CATEGORY_MAX_LAYERS = buildCategoryMaxLayer(
+	DEFAULT_CATEGORY_BASE_LAYERS,
+	DEFAULT_CATEGORY_OTHERS_LAYERS,
+);
+
+const DEFAULT_CATEGORY_CONTENT_START_LAYERS = buildCategoryContentStartLayer(
+	DEFAULT_CATEGORY_BASE_LAYERS,
+	DEFAULT_CATEGORY_OTHERS_LAYERS,
+);
+
 export const DEFAULT_CONFIG: ShuffleConfig = {
-	maxGenerations: 10,
+	maxGenerations: DEFAULT_CATEGORY_MAX_LAYERS[THEME_CATEGORY_NAMES.sakura],
 	flashCount: 0,
 	flashOnDuration: 0.08,
 	flashOffDuration: 0.06,
@@ -202,12 +332,11 @@ export const DEFAULT_CONFIG: ShuffleConfig = {
 		"花陽ひいなかた-2_s03_str0.600_seed45": 4,
 		"花鳥雛形-107_s01_str0.400_seed43": 4,
 	},
-	contentStartLayer: 5,
-	categoryMaxLayer: {
-		"sakura": 10,
-		"fuji": 3,
-		"momiji": 5,
-		"ume": 6
-	},
-	categoryContentStartLayer: {},
+	categoryBaseLayers: DEFAULT_CATEGORY_BASE_LAYERS,
+	categoryOthersLayers: DEFAULT_CATEGORY_OTHERS_LAYERS,
+	categorySwipePairCount: DEFAULT_CATEGORY_SWIPE_PAIR_COUNT,
+	contentStartLayer:
+		DEFAULT_CATEGORY_CONTENT_START_LAYERS[THEME_CATEGORY_NAMES.sakura],
+	categoryMaxLayer: DEFAULT_CATEGORY_MAX_LAYERS,
+	categoryContentStartLayer: DEFAULT_CATEGORY_CONTENT_START_LAYERS,
 };

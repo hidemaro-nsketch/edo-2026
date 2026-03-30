@@ -16,8 +16,10 @@
 import { getSlotWorldPos, getSlotWorldSize } from "../sakura/constants";
 import type { SegmentInfo } from "../sakura/types";
 import {
-	getEffectiveMaxLayer,
 	type CompiledPlan,
+	getCategorySwipePairCount,
+	getCategoryTotalLayerCount,
+	getEffectiveMaxLayer,
 	type SegmentLeg,
 	type SegmentLifecycle,
 	type ShuffleConfig,
@@ -95,10 +97,10 @@ function generateSwapPairs(
 	categoryStartLayer: Record<string, number>,
 	sourceImageStartLayer: Record<string, number>,
 	categoryMaxLayer: Record<string, number>,
+	categorySwipePairCount: Record<string, number>,
 	maxGenerations: number,
 	random: () => number = Math.random,
 ): SwapPair[] {
-	const SWAPS_PER_CATEGORY = 2;
 	const categoryGroups = groupByCategory(segments);
 
 	const used = new Set<number>();
@@ -106,6 +108,8 @@ function generateSwapPairs(
 
 	for (const [, slots] of categoryGroups) {
 		const catName = segments[slots[0]].categoryName;
+		const swapsPerCategory = categorySwipePairCount[catName] ?? 2;
+		if (swapsPerCategory <= 0) continue;
 		const startLayer = categoryStartLayer[catName] ?? 1;
 		if (gen < startLayer) continue;
 
@@ -130,7 +134,7 @@ function generateSwapPairs(
 		}
 
 		let count = 0;
-		for (let i = 0; i < shuffled.length && count < SWAPS_PER_CATEGORY; i++) {
+		for (let i = 0; i < shuffled.length && count < swapsPerCategory; i++) {
 			const slotA = shuffled[i];
 			if (used.has(slotA)) continue;
 
@@ -161,7 +165,10 @@ export function compilePlan(
 	seed?: number,
 ): CompiledPlan {
 	const count = segments.length;
-	const maxGen = getEffectiveMaxLayer(config);
+	const categoryNames = new Set(
+		segments.map((segment) => segment.categoryName),
+	);
+	const maxGen = getEffectiveMaxLayer(config, categoryNames);
 	const random = seed != null ? mulberry32(seed) : Math.random;
 
 	// ── Step 1: Generate swap pairs for each layer ──
@@ -174,8 +181,19 @@ export function compilePlan(
 				segments,
 				config.categoryStartLayer,
 				config.sourceImageStartLayer,
-				config.categoryMaxLayer,
-				config.maxGenerations,
+				Object.fromEntries(
+					Array.from(categoryNames, (name) => [
+						name,
+						getCategoryTotalLayerCount(config, name),
+					]),
+				),
+				Object.fromEntries(
+					Array.from(categoryNames, (name) => [
+						name,
+						getCategorySwipePairCount(config, name),
+					]),
+				),
+				maxGen,
 				random,
 			),
 		);

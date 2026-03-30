@@ -12,7 +12,6 @@ import type { Texture } from "three";
 import type { BuildSystem } from "../layered-shuffle/build-system";
 import { buildBaseRenderInstances } from "../layered-shuffle/render-snapshot";
 import type { SegmentRenderInstance } from "../layered-shuffle/types";
-import { getEffectiveMaxLayer } from "../layered-shuffle/types";
 import type { DebugControls } from "../routes/index";
 import type { SegmentInfo } from "../sakura/types";
 import {
@@ -30,8 +29,6 @@ type SegmentMeshesProps = {
 	atlasTexture: Texture;
 	/** Atlas texture for "others" content (falls back to atlasTexture if null) */
 	othersAtlasTexture: Texture | null;
-	/** Layer threshold: layers below this use original atlas, layers >= use others */
-	contentStartLayer: number;
 	buildSystem: BuildSystem;
 	debugControls?: DebugControls;
 	swipeEffect?: SwipeEffectParams;
@@ -52,8 +49,7 @@ export function SegmentMeshes({
 	swipeEffect,
 }: SegmentMeshesProps) {
 	const currentDimRef = useRef(1.0);
-	const contentStartLayer = buildSystem.config.contentStartLayer;
-	const layerCount = getEffectiveMaxLayer(buildSystem.config);
+	const layerCount = buildSystem.plan.maxLayer;
 
 	// Pre-compute base instances (layer 0, static)
 	const baseInstancesRef = useRef<SegmentRenderInstance[]>(
@@ -102,8 +98,11 @@ export function SegmentMeshes({
 
 		// Compute dim factor (separate in/out durations, with hold)
 		const phase = buildSystem.state.phase;
-		const stayDim = phase === "swipe" || phase === "dimming"
-			|| (phase === "hold" && buildSystem.state.phaseTime < buildSystem.config.dimHoldTime);
+		const stayDim =
+			phase === "swipe" ||
+			phase === "dimming" ||
+			(phase === "hold" &&
+				buildSystem.state.phaseTime < buildSystem.config.dimHoldTime);
 		const dimTarget = stayDim ? (swipeEffect?.dimFactor ?? 0.3) : 1.0;
 		const isDimming = dimTarget < currentDimRef.current;
 		const dimDuration = isDimming
@@ -111,14 +110,15 @@ export function SegmentMeshes({
 			: buildSystem.config.dimFadeOutDuration;
 		const dimSpeed = 4.6 / Math.max(0.01, dimDuration);
 		currentDimRef.current +=
-			(dimTarget - currentDimRef.current) *
-			Math.min(1, delta * dimSpeed);
+			(dimTarget - currentDimRef.current) * Math.min(1, delta * dimSpeed);
 	});
 
 	const getSegmentsForLayer = useCallback(
 		(layer: number) =>
-			layer >= contentStartLayer ? segments : originalSegments,
-		[contentStartLayer, segments, originalSegments],
+			layer >= buildSystem.config.contentStartLayer
+				? segments
+				: originalSegments,
+		[buildSystem.config.contentStartLayer, segments, originalSegments],
 	);
 
 	const getRenderData = useCallback((): FrameRenderData => {
@@ -127,7 +127,9 @@ export function SegmentMeshes({
 
 		data.activeInstances = buildSystem.getActiveInstances();
 		data.activeSegments =
-			currentLayer >= contentStartLayer ? segments : originalSegments;
+			currentLayer >= buildSystem.config.contentStartLayer
+				? segments
+				: originalSegments;
 		data.baseInstances = baseInstancesRef.current;
 		data.baseSegments = originalSegments;
 		data.settledByLayer = buildSystem.getSettledByLayer();
@@ -142,13 +144,7 @@ export function SegmentMeshes({
 		data.activeOpacity = fadeProgress > 0 ? 1 - fadeProgress : 1;
 
 		return data;
-	}, [
-		buildSystem,
-		segments,
-		originalSegments,
-		contentStartLayer,
-		getSegmentsForLayer,
-	]);
+	}, [buildSystem, segments, originalSegments, getSegmentsForLayer]);
 
 	return (
 		<SegmentMeshRenderer
