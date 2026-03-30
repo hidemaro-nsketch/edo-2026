@@ -15,21 +15,21 @@
  *   - Gather-in uses category-based grouping (different from scatter-out's edge-based)
  */
 
+import type { SegmentRenderInstance } from "../layered-shuffle/types";
 import { KIMONO_SIZE } from "../sakura/constants";
 import type { SegmentInfo } from "../sakura/types";
-import type { SegmentRenderInstance } from "../layered-shuffle/types";
 import type {
-	BackgroundTransitionState,
 	BackgroundFragmentRenderState,
 	BackgroundFragmentState,
+	BackgroundTransitionState,
 	SegmentTransitionState,
 	TransitionConfig,
 	TransitionPhase,
 } from "./types";
 import { DEFAULT_TRANSITION_CONFIG } from "./types";
 import {
-	generateVoronoiFragments,
 	disposeFragments,
+	generateVoronoiFragments,
 	type VoronoiFragment,
 } from "./voronoi-fragments";
 
@@ -68,21 +68,24 @@ function seededRandom(seed: number): () => number {
 
 /** Fixed scatter/gather direction per theme content */
 const THEME_DIRECTIONS: Record<string, [number, number]> = {
-	fuji: [0, 1],    // 藤 → 上 (up)
-	momiji: [1, 0],  // 紅葉 → 右 (right)
+	fuji: [0, 1], // 藤 → 上 (up)
+	momiji: [1, 0], // 紅葉 → 右 (right)
 	sakura: [-1, 0], // サクラ → 左 (left)
-	ume: [0, -1],    // 梅 → 下 (down)
+	ume: [0, -1], // 梅 → 下 (down)
 };
 
 /** Cardinal directions fallback */
 const DIRECTIONS: Array<[number, number]> = [
 	[-1, 0], // left
-	[1, 0],  // right
+	[1, 0], // right
 	[0, -1], // down
-	[0, 1],  // up
+	[0, 1], // up
 ];
 
-function pickDirectionForTheme(themeId: string, seed: number): [number, number] {
+function pickDirectionForTheme(
+	themeId: string,
+	seed: number,
+): [number, number] {
 	const dir = THEME_DIRECTIONS[themeId];
 	if (dir) return dir;
 	const idx = Math.abs(seed) % DIRECTIONS.length;
@@ -103,7 +106,6 @@ function varyDirection(
 	const newAngle = angle + deviation;
 	return [Math.cos(newAngle), Math.sin(newAngle)];
 }
-
 
 // ─── Helper: Build fragment animation states from Voronoi cells ─────────────
 
@@ -165,9 +167,23 @@ export class ThemeTransitionSystem {
 	private newSegments: SegmentInfo[] = [];
 
 	/** Base positions for old segments (where they start from) */
-	private oldBasePositions: Array<{ x: number; y: number; w: number; h: number }> = [];
+	private oldBasePositions: Array<{
+		x: number;
+		y: number;
+		z: number;
+		w: number;
+		h: number;
+		useOthersAtlas: number;
+	}> = [];
 	/** Base positions for new segments (where they land) */
-	private newBasePositions: Array<{ x: number; y: number; w: number; h: number }> = [];
+	private newBasePositions: Array<{
+		x: number;
+		y: number;
+		z: number;
+		w: number;
+		h: number;
+		useOthersAtlas: number;
+	}> = [];
 
 	/** Callback when old textures can be safely disposed */
 	private onOldTexturesDisposable: (() => void) | null = null;
@@ -183,12 +199,21 @@ export class ThemeTransitionSystem {
 	constructor(
 		oldSegments: SegmentInfo[],
 		config?: Partial<TransitionConfig>,
+		oldDisplayInstances?: SegmentRenderInstance[],
 	) {
 		this.config = { ...DEFAULT_TRANSITION_CONFIG, ...config };
-		this.scatterDirection = pickDirectionForTheme(this.config.oldThemeId, this.config.noiseSeed);
-		this.gatherDirection = pickDirectionForTheme(this.config.newThemeId, this.config.noiseSeed);
+		this.scatterDirection = pickDirectionForTheme(
+			this.config.oldThemeId,
+			this.config.noiseSeed,
+		);
+		this.gatherDirection = pickDirectionForTheme(
+			this.config.newThemeId,
+			this.config.noiseSeed,
+		);
 		this.oldSegments = oldSegments;
-		this.oldBasePositions = this.computeBasePositions(oldSegments);
+		this.oldBasePositions = oldDisplayInstances?.length
+			? this.computePositionsFromInstances(oldDisplayInstances)
+			: this.computeBasePositions(oldSegments);
 		this.scatterStates = this.buildScatterStates(oldSegments);
 
 		// Generate Voronoi background fragments (unique per transition via seed)
@@ -349,10 +374,7 @@ export class ThemeTransitionSystem {
 		}
 
 		// Wait for new assets + minimum blackout duration
-		if (
-			this.newAssetsReady &&
-			this.phaseTime >= this.config.blackoutDuration
-		) {
+		if (this.newAssetsReady && this.phaseTime >= this.config.blackoutDuration) {
 			this.phase = "gather-in";
 			this.phaseTime = 0;
 		}
@@ -369,10 +391,7 @@ export class ThemeTransitionSystem {
 	// ─── Instance Generation ─────────────────────────────────────────────────
 
 	private getScatterOutInstances(): SegmentRenderInstance[] {
-		const progress = Math.min(
-			1,
-			this.phaseTime / this.config.scatterDuration,
-		);
+		const progress = Math.min(1, this.phaseTime / this.config.scatterDuration);
 		const instances: SegmentRenderInstance[] = [];
 		const exitDistance = KIMONO_SIZE * 1.5; // fly well off-screen
 
@@ -395,10 +414,10 @@ export class ThemeTransitionSystem {
 				segId: state.segId,
 				x,
 				y,
-				z: 0,
+				z: base.z,
 				w: base.w,
 				h: base.h,
-				useOthersAtlas: 0,
+				useOthersAtlas: base.useOthersAtlas,
 				wipeRole: 0,
 				isBboxOutline: 0,
 				swipeProgress: 0,
@@ -425,25 +444,16 @@ export class ThemeTransitionSystem {
 			for (const state of this.scatterStates) {
 				const segProgress = Math.max(
 					0,
-					Math.min(
-						1,
-						(progress - state.startDelay) / (1 - state.startDelay),
-					),
+					Math.min(1, (progress - state.startDelay) / (1 - state.startDelay)),
 				);
 				map.set(state.segId, 1 - easeInQuad(segProgress));
 			}
 		} else if (this.phase === "gather-in") {
-			const progress = Math.min(
-				1,
-				this.phaseTime / this.config.gatherDuration,
-			);
+			const progress = Math.min(1, this.phaseTime / this.config.gatherDuration);
 			for (const state of this.gatherStates) {
 				const segProgress = Math.max(
 					0,
-					Math.min(
-						1,
-						(progress - state.startDelay) / (1 - state.startDelay),
-					),
+					Math.min(1, (progress - state.startDelay) / (1 - state.startDelay)),
 				);
 				map.set(state.segId, smoothstep(segProgress));
 			}
@@ -453,10 +463,7 @@ export class ThemeTransitionSystem {
 	}
 
 	private getGatherInInstances(): SegmentRenderInstance[] {
-		const progress = Math.min(
-			1,
-			this.phaseTime / this.config.gatherDuration,
-		);
+		const progress = Math.min(1, this.phaseTime / this.config.gatherDuration);
 		const instances: SegmentRenderInstance[] = [];
 		const entryDistance = KIMONO_SIZE * 1.5;
 
@@ -473,10 +480,8 @@ export class ThemeTransitionSystem {
 			// Position: easeOutCubic for deceleration feel (coming in from outside)
 			const posT = easeOutCubic(segProgress);
 			// Start from outside (1 - posT), end at base position
-			const startX =
-				base.x - state.exitDirection[0] * entryDistance;
-			const startY =
-				base.y - state.exitDirection[1] * entryDistance;
+			const startX = base.x - state.exitDirection[0] * entryDistance;
+			const startY = base.y - state.exitDirection[1] * entryDistance;
 			const x = startX + (base.x - startX) * posT;
 			const y = startY + (base.y - startY) * posT;
 
@@ -484,10 +489,10 @@ export class ThemeTransitionSystem {
 				segId: state.segId,
 				x,
 				y,
-				z: 0,
+				z: base.z,
 				w: base.w,
 				h: base.h,
-				useOthersAtlas: 0,
+				useOthersAtlas: base.useOthersAtlas,
 				wipeRole: 0,
 				isBboxOutline: 0,
 				swipeProgress: 0,
@@ -549,10 +554,7 @@ export class ThemeTransitionSystem {
 
 			fragmentRenderStates.push({
 				fragmentIndex: fs.fragmentIndex,
-				translateOffset: [
-					fullOffsetX * (1 - posT),
-					fullOffsetY * (1 - posT),
-				],
+				translateOffset: [fullOffsetX * (1 - posT), fullOffsetY * (1 - posT)],
 				opacity: opacityT,
 			});
 		}
@@ -562,25 +564,63 @@ export class ThemeTransitionSystem {
 
 	// ─── State Builders ──────────────────────────────────────────────────────
 
-	private computeBasePositions(
-		segments: SegmentInfo[],
-	): Array<{ x: number; y: number; w: number; h: number }> {
+	private computeBasePositions(segments: SegmentInfo[]): Array<{
+		x: number;
+		y: number;
+		z: number;
+		w: number;
+		h: number;
+		useOthersAtlas: number;
+	}> {
 		return segments.map((seg) => {
 			const cx =
-				(seg.bboxInSource[0] + seg.bboxInSource[2] * 0.5) /
-				seg.originalSize[0];
+				(seg.bboxInSource[0] + seg.bboxInSource[2] * 0.5) / seg.originalSize[0];
 			const cy =
-				(seg.bboxInSource[1] + seg.bboxInSource[3] * 0.5) /
-				seg.originalSize[1];
+				(seg.bboxInSource[1] + seg.bboxInSource[3] * 0.5) / seg.originalSize[1];
 			const bboxW = seg.bboxInSource[2] / seg.originalSize[0];
 			const bboxH = seg.bboxInSource[3] / seg.originalSize[1];
 			return {
 				x: (cx - 0.5) * KIMONO_SIZE,
 				y: -(cy - 0.5) * KIMONO_SIZE,
+				z: 0,
 				w: bboxW * KIMONO_SIZE,
 				h: bboxH * KIMONO_SIZE,
+				useOthersAtlas: 0,
 			};
 		});
+	}
+
+	private computePositionsFromInstances(
+		instances: SegmentRenderInstance[],
+	): Array<{
+		x: number;
+		y: number;
+		z: number;
+		w: number;
+		h: number;
+		useOthersAtlas: number;
+	}> {
+		const positions: Array<{
+			x: number;
+			y: number;
+			z: number;
+			w: number;
+			h: number;
+			useOthersAtlas: number;
+		}> = [];
+
+		for (const inst of instances) {
+			positions[inst.segId] = {
+				x: inst.x,
+				y: inst.y,
+				z: inst.z,
+				w: inst.w,
+				h: inst.h,
+				useOthersAtlas: inst.useOthersAtlas,
+			};
+		}
+
+		return positions;
 	}
 
 	private buildScatterStates(
@@ -627,9 +667,7 @@ export class ThemeTransitionSystem {
 		return states;
 	}
 
-	private buildGatherStates(
-		segments: SegmentInfo[],
-	): SegmentTransitionState[] {
+	private buildGatherStates(segments: SegmentInfo[]): SegmentTransitionState[] {
 		const rng = seededRandom(this.config.noiseSeed + 1000);
 
 		// Group by category for category-based stagger
@@ -664,8 +702,7 @@ export class ThemeTransitionSystem {
 			const catIdx = categoryOrder.get(seg.categoryName) ?? 0;
 			const noiseVal = rng();
 
-			const categoryDelay =
-				totalCategories > 1 ? catIdx / totalCategories : 0;
+			const categoryDelay = totalCategories > 1 ? catIdx / totalCategories : 0;
 			const priority = categoryDelay * 0.7 + noiseVal * 0.3;
 
 			return {

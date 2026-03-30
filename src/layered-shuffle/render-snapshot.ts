@@ -124,6 +124,40 @@ export function buildBaseRenderInstances(
 	});
 }
 
+export function buildFinalDisplayInstances(
+	plan: CompiledPlan,
+	originalSegments: SegmentInfo[],
+	mergedSegments: SegmentInfo[],
+	config: ShuffleConfig,
+): SegmentRenderInstance[] {
+	const slotCount = plan.mappingByLayer[0]?.length ?? originalSegments.length;
+	const lastChangedLayerBySlot = new Array<number>(slotCount).fill(0);
+	const catalogs = { originalSegments, mergedSegments };
+
+	for (let layer = 1; layer <= config.maxGenerations; layer++) {
+		for (const [slotA, slotB] of plan.swapsByLayer[layer] ?? []) {
+			lastChangedLayerBySlot[slotA] = layer;
+			lastChangedLayerBySlot[slotB] = layer;
+		}
+	}
+
+	return Array.from({ length: slotCount }, (_, slot) => {
+		const displayLayer = lastChangedLayerBySlot[slot] ?? 0;
+		const mapping =
+			plan.mappingByLayer[displayLayer] ?? plan.mappingByLayer[0] ?? [];
+		const segId = mapping[slot] ?? slot;
+		const useOthersAtlas = getAtlasSelectionForLayer(displayLayer, config);
+		return buildSegmentInstanceAtSlot(
+			catalogs,
+			segId,
+			slot,
+			displayLayer,
+			config,
+			useOthersAtlas,
+		);
+	});
+}
+
 export function buildSettledRenderInstancesForLayer(
 	plan: CompiledPlan,
 	originalSegments: SegmentInfo[],

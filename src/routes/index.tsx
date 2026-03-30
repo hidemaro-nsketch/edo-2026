@@ -524,7 +524,7 @@ type ShuffleContentProps = {
 	swipeEffect: SwipeEffectParams;
 	bgDimRef: React.MutableRefObject<number>;
 	/** Called when the animation cycle completes (idle), to trigger theme switch */
-	onCycleComplete?: () => void;
+	onCycleComplete?: (buildSystem: BuildSystem) => void;
 	/** Shared mutable status for the HTML status panel */
 	statusRef?: React.MutableRefObject<SceneStatus>;
 };
@@ -684,7 +684,7 @@ function CameraAndLifecycle({
 	buildSystem: BuildSystem;
 	config: ShuffleConfig;
 	createNextPlan: () => ReturnType<typeof compilePlan>;
-	onCycleComplete?: () => void;
+	onCycleComplete?: (buildSystem: BuildSystem) => void;
 }) {
 	const currentLayerRef = useRef(1);
 	const cycleCompleteCalledRef = useRef(false);
@@ -709,7 +709,7 @@ function CameraAndLifecycle({
 			if (onCycleComplete && !cycleCompleteCalledRef.current) {
 				// Notify parent to switch theme (will unmount this component via key change)
 				cycleCompleteCalledRef.current = true;
-				onCycleComplete();
+				onCycleComplete(buildSystem);
 			} else if (!onCycleComplete) {
 				// No theme switching — restart with new plan in same theme
 				const plan = createNextPlan();
@@ -827,7 +827,7 @@ function Scene({
 	 * Called by ShuffleContent when animation cycle completes (idle).
 	 * Starts the scatter-out transition and begins loading next theme's assets.
 	 */
-	const onCycleComplete = useRef(async () => {
+	const onCycleComplete = useRef(async (buildSystem: BuildSystem) => {
 		const curAssets = currentAssetsRef.current;
 		if (!curAssets) return;
 
@@ -867,10 +867,12 @@ function Scene({
 			oldThemeId,
 			newThemeId: nextTheme.id,
 		};
+		const finalDisplayInstances = buildSystem.getFinalDisplayInstances();
 
 		const system = new ThemeTransitionSystem(
 			curAssets.originalSegments,
 			transitionConfig,
+			finalDisplayInstances,
 		);
 
 		// Set up dispose callback: dispose old textures after blackout + 1 frame
@@ -1069,8 +1071,10 @@ function TransitionOverlay({
 			oldOthersAtlasTexture={currentAssets.othersAtlasTexture ?? undefined}
 			newAtlasTexture={nextAssets?.atlasTexture}
 			newOthersAtlasTexture={nextAssets?.othersAtlasTexture ?? undefined}
-			oldSegments={currentAssets.originalSegments}
-			newSegments={nextAssets?.originalSegments ?? []}
+			oldOriginalSegments={currentAssets.originalSegments}
+			oldMergedSegments={currentAssets.segments}
+			newOriginalSegments={nextAssets?.originalSegments ?? []}
+			newMergedSegments={nextAssets?.segments ?? []}
 			swipeEffect={swipeEffect}
 			oldBgTexture={currentAssets.kimonoTexture}
 			newBgTexture={newBgTexture}

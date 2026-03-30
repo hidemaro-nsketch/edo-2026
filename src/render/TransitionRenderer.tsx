@@ -15,9 +15,9 @@
 import { useFrame } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
+	type BufferGeometry,
 	Mesh,
 	MeshBasicMaterial,
-	type BufferGeometry,
 	type Texture,
 } from "three";
 import type { SegmentRenderInstance } from "../layered-shuffle/types";
@@ -36,8 +36,10 @@ type TransitionRendererProps = {
 	oldOthersAtlasTexture?: Texture;
 	newAtlasTexture?: Texture;
 	newOthersAtlasTexture?: Texture;
-	oldSegments: SegmentInfo[];
-	newSegments: SegmentInfo[];
+	oldOriginalSegments: SegmentInfo[];
+	oldMergedSegments: SegmentInfo[];
+	newOriginalSegments: SegmentInfo[];
+	newMergedSegments: SegmentInfo[];
 	swipeEffect?: SwipeEffectParams;
 	oldBgTexture?: Texture | null;
 	newBgTexture?: Texture | null;
@@ -150,8 +152,10 @@ export function TransitionRenderer({
 	oldOthersAtlasTexture,
 	newAtlasTexture,
 	newOthersAtlasTexture,
-	oldSegments,
-	newSegments,
+	oldOriginalSegments,
+	oldMergedSegments,
+	newOriginalSegments,
+	newMergedSegments,
 	swipeEffect,
 	oldBgTexture,
 	newBgTexture,
@@ -169,7 +173,11 @@ export function TransitionRenderer({
 			? newOthersAtlasTexture
 			: oldOthersAtlasTexture;
 
-	const maxSegments = Math.max(oldSegments.length, newSegments.length, 1);
+	const maxSegments = Math.max(
+		oldOriginalSegments.length,
+		newOriginalSegments.length,
+		1,
+	);
 
 	const emptyBlackFills = useMemo(() => new Map<number, never[]>(), []);
 	const emptySettled = useMemo(
@@ -180,14 +188,14 @@ export function TransitionRenderer({
 
 	const renderDataRef = useRef<FrameRenderData>({
 		activeInstances: [],
-		activeSegments: oldSegments,
+		activeSegments: oldOriginalSegments,
 		baseInstances: [],
-		baseSegments: oldSegments,
+		baseSegments: oldOriginalSegments,
 		settledByLayer: emptySettled,
 		activeBlackFills: emptyBlackFillArray,
 		committedBlackFills: emptyBlackFills,
 		currentLayer: 0,
-		getSegmentsForLayer: () => oldSegments,
+		getSegmentsForLayer: () => oldMergedSegments,
 		dimFactor: 1.0,
 	});
 
@@ -197,22 +205,44 @@ export function TransitionRenderer({
 
 	const getRenderData = useCallback((): FrameRenderData => {
 		const instances = transitionSystem.getInstances();
-		const segments = transitionSystem.getCurrentSegments();
+		const phase = transitionSystem.getPhase();
+		const usingNewTheme = phase === "gather-in" || phase === "complete";
+		const baseSegments = usingNewTheme
+			? newOriginalSegments.length > 0
+				? newOriginalSegments
+				: oldOriginalSegments
+			: oldOriginalSegments;
+		const othersSegments = usingNewTheme
+			? newMergedSegments.length > 0
+				? newMergedSegments
+				: baseSegments
+			: oldMergedSegments.length > 0
+				? oldMergedSegments
+				: oldOriginalSegments;
 		const data = renderDataRef.current;
 
 		data.activeInstances = instances;
-		data.activeSegments = segments;
+		data.activeSegments = baseSegments;
 		data.baseInstances = [];
-		data.baseSegments = segments;
+		data.baseSegments = baseSegments;
 		data.settledByLayer = emptySettled;
 		data.activeBlackFills = emptyBlackFillArray;
 		data.committedBlackFills = emptyBlackFills;
 		data.currentLayer = 0;
-		data.getSegmentsForLayer = () => segments;
+		data.getSegmentsForLayer = () => othersSegments;
 		data.dimFactor = 1.0;
 
 		return data;
-	}, [transitionSystem, emptySettled, emptyBlackFillArray, emptyBlackFills]);
+	}, [
+		transitionSystem,
+		emptySettled,
+		emptyBlackFillArray,
+		emptyBlackFills,
+		oldOriginalSegments,
+		oldMergedSegments,
+		newOriginalSegments,
+		newMergedSegments,
+	]);
 
 	const showSegments =
 		transitionSystem.getPhase() !== "blackout" &&

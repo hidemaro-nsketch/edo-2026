@@ -1,6 +1,7 @@
 import type { SegmentInfo } from "../sakura/types";
 import {
 	buildBlackFillRenderInstancesForLayer,
+	buildFinalDisplayInstances,
 	// Collapse disabled: kept for reference
 	// buildCollapseRenderInstances,
 	buildFlashRenderInstancesForLayer,
@@ -395,6 +396,15 @@ export class BuildSystem {
 
 	getCurrentLayer(): number {
 		return this.state.currentLayer;
+	}
+
+	getFinalDisplayInstances(): SegmentRenderInstance[] {
+		return buildFinalDisplayInstances(
+			this.plan,
+			this.originalSegments,
+			this.mergedSegments,
+			this.config,
+		);
 	}
 
 	/** Returns 0..1 fade-out progress during holding phase (0 = fully visible, 1 = fully faded), easeInBack */
