@@ -93,8 +93,8 @@ function DebugPage() {
 				overflow: "hidden",
 				background: "black",
 				display: "flex",
-				alignItems: "center",
-				justifyContent: "center",
+				alignItems: "flex-start",
+				justifyContent: "flex-start",
 			}}
 		>
 			<canvas
