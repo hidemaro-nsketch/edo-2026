@@ -42,6 +42,10 @@ export type TransitionConfig = {
 	staggerOutDuration: number;
 	/** Max stagger spread for gather-in (0..1 of phase duration) */
 	staggerInDuration: number;
+	/** Theme ID of the old (outgoing) theme — determines scatter-out direction */
+	oldThemeId: string;
+	/** Theme ID of the new (incoming) theme — determines gather-in direction */
+	newThemeId: string;
 };
 
 /** Per-segment state during a transition */
@@ -101,4 +105,6 @@ export const DEFAULT_TRANSITION_CONFIG: TransitionConfig = {
 	directionSpread: 0.15,
 	staggerOutDuration: 0.8,
 	staggerInDuration: 0.8,
+	oldThemeId: "sakura",
+	newThemeId: "ume",
 };

@@ -64,9 +64,17 @@ function seededRandom(seed: number): () => number {
 	};
 }
 
-// ─── Helper: Pick a unified exit direction based on seed ─────────────────────
+// ─── Helper: Pick exit direction per theme ──────────────────────────────────
 
-/** Cardinal directions to choose from */
+/** Fixed scatter/gather direction per theme content */
+const THEME_DIRECTIONS: Record<string, [number, number]> = {
+	fuji: [0, 1],    // 藤 → 上 (up)
+	momiji: [1, 0],  // 紅葉 → 右 (right)
+	sakura: [-1, 0], // サクラ → 左 (left)
+	ume: [0, -1],    // 梅 → 下 (down)
+};
+
+/** Cardinal directions fallback */
 const DIRECTIONS: Array<[number, number]> = [
 	[-1, 0], // left
 	[1, 0],  // right
@@ -74,7 +82,9 @@ const DIRECTIONS: Array<[number, number]> = [
 	[0, 1],  // up
 ];
 
-function pickUnifiedDirection(seed: number): [number, number] {
+function pickDirectionForTheme(themeId: string, seed: number): [number, number] {
+	const dir = THEME_DIRECTIONS[themeId];
+	if (dir) return dir;
 	const idx = Math.abs(seed) % DIRECTIONS.length;
 	return DIRECTIONS[idx];
 }
@@ -132,8 +142,10 @@ export class ThemeTransitionSystem {
 	private phaseTime = 0;
 	private totalTime = 0;
 
-	/** Unified exit direction for all elements */
-	private unifiedDirection: [number, number];
+	/** Exit direction for scatter-out (based on old theme) */
+	private scatterDirection: [number, number];
+	/** Entry direction for gather-in (based on new theme) */
+	private gatherDirection: [number, number];
 
 	/** Per-segment transition states (scatter-out ordering) */
 	private scatterStates: SegmentTransitionState[] = [];
@@ -142,8 +154,10 @@ export class ThemeTransitionSystem {
 
 	/** Voronoi fragments for background */
 	private bgFragments: VoronoiFragment[] = [];
-	/** Per-fragment animation states */
+	/** Per-fragment animation states (scatter-out) */
 	private bgFragmentStates: BackgroundFragmentState[] = [];
+	/** Per-fragment animation states (gather-in, based on new theme direction) */
+	private bgGatherFragmentStates: BackgroundFragmentState[] = [];
 
 	/** Segments for the old theme (scatter-out) */
 	private oldSegments: SegmentInfo[] = [];
@@ -171,7 +185,8 @@ export class ThemeTransitionSystem {
 		config?: Partial<TransitionConfig>,
 	) {
 		this.config = { ...DEFAULT_TRANSITION_CONFIG, ...config };
-		this.unifiedDirection = pickUnifiedDirection(this.config.noiseSeed);
+		this.scatterDirection = pickDirectionForTheme(this.config.oldThemeId, this.config.noiseSeed);
+		this.gatherDirection = pickDirectionForTheme(this.config.newThemeId, this.config.noiseSeed);
 		this.oldSegments = oldSegments;
 		this.oldBasePositions = this.computeBasePositions(oldSegments);
 		this.scatterStates = this.buildScatterStates(oldSegments);
@@ -184,8 +199,15 @@ export class ThemeTransitionSystem {
 		const bgRng = seededRandom(this.config.noiseSeed + 500);
 		this.bgFragmentStates = buildFragmentStates(
 			this.bgFragments,
-			this.unifiedDirection,
+			this.scatterDirection,
 			bgRng,
+			this.config.directionSpread,
+		);
+		const bgGatherRng = seededRandom(this.config.noiseSeed + 600);
+		this.bgGatherFragmentStates = buildFragmentStates(
+			this.bgFragments,
+			this.gatherDirection,
+			bgGatherRng,
 			this.config.directionSpread,
 		);
 	}
@@ -505,7 +527,7 @@ export class ThemeTransitionSystem {
 		const entryDistance = KIMONO_SIZE * 1.5;
 		const fragmentRenderStates: BackgroundFragmentRenderState[] = [];
 
-		for (const fs of this.bgFragmentStates) {
+		for (const fs of this.bgGatherFragmentStates) {
 			const laggedProgress = Math.max(0, (progress - 0.3) / 0.7);
 			const fragProgress = Math.max(
 				0,
@@ -577,7 +599,7 @@ export class ThemeTransitionSystem {
 			// Stagger based on projection onto unified direction:
 			// segments aligned with exit direction leave first
 			const projectedDist =
-				pos.x * this.unifiedDirection[0] + pos.y * this.unifiedDirection[1];
+				pos.x * this.scatterDirection[0] + pos.y * this.scatterDirection[1];
 			const normalizedProj = (projectedDist + half) / KIMONO_SIZE; // 0..1
 
 			const priority =
@@ -587,7 +609,7 @@ export class ThemeTransitionSystem {
 				segId: i,
 				startDelay: priority * this.config.staggerOutDuration,
 				exitDirection: varyDirection(
-					this.unifiedDirection,
+					this.scatterDirection,
 					rng,
 					this.config.directionSpread,
 				),
@@ -624,10 +646,12 @@ export class ThemeTransitionSystem {
 
 		const totalCategories = sortedCategories.length;
 
-		// Gather uses opposite direction (elements come from the opposite side)
+		// Gather direction: segments enter FROM the new theme's direction side
+		// exitDirection is negated by the animation code (startPos = base - exitDir * dist),
+		// so we pass the theme direction directly to make segments come from that side.
 		const gatherDir: [number, number] = [
-			-this.unifiedDirection[0],
-			-this.unifiedDirection[1],
+			-this.gatherDirection[0],
+			-this.gatherDirection[1],
 		];
 
 		const states: SegmentTransitionState[] = segments.map((seg, i) => {

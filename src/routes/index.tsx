@@ -758,11 +758,14 @@ function Scene({ statusRef }: { statusRef: React.MutableRefObject<SceneStatus> }
 
 		// Use a unique seed per transition so Voronoi pattern differs each time
 		transitionCountRef.current += 1;
+		const oldThemeId = AVAILABLE_THEMES[themeIndexRef.current]?.id ?? "sakura";
 		const transitionConfig: Partial<TransitionConfig> = {
 			scatterDuration: gui.transitionConfig?.scatterDuration ?? DEFAULT_TRANSITION_CONFIG.scatterDuration,
 			blackoutDuration: gui.transitionConfig?.blackoutDuration ?? DEFAULT_TRANSITION_CONFIG.blackoutDuration,
 			gatherDuration: gui.transitionConfig?.gatherDuration ?? DEFAULT_TRANSITION_CONFIG.gatherDuration,
 			noiseSeed: Date.now() + transitionCountRef.current,
+			oldThemeId,
+			newThemeId: nextTheme.id,
 		};
 
 		const system = new ThemeTransitionSystem(
