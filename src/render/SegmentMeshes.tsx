@@ -14,6 +14,7 @@ import { buildBaseRenderInstances } from "../layered-shuffle/render-snapshot";
 import type { SegmentRenderInstance } from "../layered-shuffle/types";
 import type { DebugControls } from "../routes/index";
 import type { SegmentInfo } from "../sakura/types";
+import type { BlackFillScale } from "../themes/theme-config";
 import {
 	type FrameRenderData,
 	SegmentMeshRenderer,
@@ -32,6 +33,7 @@ type SegmentMeshesProps = {
 	buildSystem: BuildSystem;
 	debugControls?: DebugControls;
 	swipeEffect?: SwipeEffectParams;
+	blackFillScale?: BlackFillScale;
 };
 
 // Re-export SwipeEffectParams for backward compatibility
@@ -47,6 +49,7 @@ export function SegmentMeshes({
 	buildSystem,
 	debugControls,
 	swipeEffect,
+	blackFillScale,
 }: SegmentMeshesProps) {
 	const currentDimRef = useRef(1.0);
 	const layerCount = buildSystem.plan.maxLayer;
@@ -138,13 +141,14 @@ export function SegmentMeshes({
 		data.currentLayer = currentLayer;
 		data.getSegmentsForLayer = getSegmentsForLayer;
 		data.dimFactor = currentDimRef.current;
+		data.blackFillScale = blackFillScale;
 
 		// Fade out during holding phase
 		const fadeProgress = buildSystem.getFadeOutProgress();
 		data.activeOpacity = fadeProgress > 0 ? 1 - fadeProgress : 1;
 
 		return data;
-	}, [buildSystem, segments, originalSegments, getSegmentsForLayer]);
+	}, [buildSystem, segments, originalSegments, getSegmentsForLayer, blackFillScale]);
 
 	return (
 		<SegmentMeshRenderer

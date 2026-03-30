@@ -17,6 +17,14 @@ export type SegmentLabelFilter = {
 	content: string[] | null;
 };
 
+/** Black fill scale per category (how much larger to draw the black silhouette) */
+export type BlackFillScale = {
+	/** Scale factor for layout segments (default: 1.15) */
+	layout: number;
+	/** Scale factor for content segments (default: 1.15) */
+	content: number;
+};
+
 /** A single theme's asset paths and display metadata */
 export type ThemeConfig = {
 	/** Unique identifier for the theme */
@@ -33,6 +41,8 @@ export type ThemeConfig = {
 	available: boolean;
 	/** Segment label filters — which labels to use per category */
 	segmentLabels: SegmentLabelFilter;
+	/** Black fill scale per category */
+	blackFillScale: BlackFillScale;
 };
 
 /**
@@ -40,6 +50,7 @@ export type ThemeConfig = {
  * Unavailable themes are skipped during rotation.
  */
 export const THEME_SEQUENCE: ThemeConfig[] = [
+	
 	{
 		id: "sakura",
 		displayName: "桜",
@@ -50,6 +61,10 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		segmentLabels: {
 			layout: ["sakura"],
 			content: ["sakura"]
+		},
+		blackFillScale: {
+			layout: 1.15,
+			content: 1.15,
 		},
 	},
 	{
@@ -63,7 +78,28 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 			layout: ["ume"],
 			content: ["ume"],
 		},
+		blackFillScale: {
+			layout: 1.15,
+			content: 1.15,
+		},
 	},
+{
+		id: "momiji",
+		displayName: "紅葉",
+		layoutBasePath: "/momiji",
+		contentBasePath: "/momijibackground",
+		backgroundPath: "/momiji/output-3-2x-inv-vec.png",
+		available: true,
+		segmentLabels: {
+			layout: ["momiji(black)"],
+			content: ["momiji"],
+		},
+		blackFillScale: {
+			layout: 1.3,
+			content: 1.3,
+		},
+	},
+
 	{
 		id: "fuji",
 		displayName: "藤",
@@ -75,20 +111,12 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 			layout: ["fuji"],
 			content: ["fuji"],
 		},
-	},
-	{
-		id: "momiji",
-		displayName: "紅葉",
-		layoutBasePath: "/momiji",
-		contentBasePath: "/momijibackground",
-		backgroundPath: "/momiji/output-3-2x-inv-vec.png",
-		available: true,
-		segmentLabels: {
-			layout: ["momiji(white)", "momiji(black)"],
-			content: ["momiji"],
+		blackFillScale: {
+			layout: 1.3,
+			content: 1.3,
 		},
 	},
-];
+	];
 
 /** Get only the available themes for runtime rotation */
 export function getAvailableThemes(): ThemeConfig[] {

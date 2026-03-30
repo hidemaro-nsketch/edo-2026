@@ -482,6 +482,8 @@ type ShuffleContentProps = {
 	onCycleComplete?: (buildSystem: BuildSystem) => void;
 	/** Shared mutable status for the HTML status panel */
 	statusRef?: React.MutableRefObject<SceneStatus>;
+	/** Black fill scale per category from theme config */
+	blackFillScale?: { layout: number; content: number };
 };
 
 /**
@@ -508,6 +510,7 @@ function ShuffleContent({
 	bgDimRef,
 	onCycleComplete,
 	statusRef,
+	blackFillScale,
 }: ShuffleContentProps) {
 	const systemRef = useRef<BuildSystem | null>(null);
 	const lastResetRef = useRef(0);
@@ -630,6 +633,7 @@ function ShuffleContent({
 				buildSystem={system}
 				debugControls={debugControls}
 				swipeEffect={swipeEffect}
+				blackFillScale={blackFillScale}
 			/>
 			<ConnectionLines buildSystem={system} />
 		</>
@@ -1020,6 +1024,7 @@ function Scene({
 					bgDimRef={bgDimRef}
 					onCycleComplete={onCycleComplete}
 					statusRef={statusRef}
+					blackFillScale={currentAssets.theme.blackFillScale}
 				/>
 			)}
 

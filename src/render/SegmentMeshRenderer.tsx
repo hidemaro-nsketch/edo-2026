@@ -27,6 +27,7 @@ import type {
 	SegmentRenderInstance,
 } from "../layered-shuffle/types";
 import type { SegmentInfo } from "../sakura/types";
+import type { BlackFillScale } from "../themes/theme-config";
 
 // ─── Shaders ─────────────────────────────────────────────────────────────────
 
@@ -308,6 +309,7 @@ export type WriteOptions = {
 	opacityOverride?: Map<number, number>;
 	dimFactor?: number;
 	othersSegments?: SegmentInfo[];
+	blackFillScale?: BlackFillScale;
 };
 
 export function writeInstances(
@@ -320,6 +322,7 @@ export function writeInstances(
 	const opacityOverride = opts?.opacityOverride;
 	const dim = opts?.dimFactor ?? 1.0;
 	const othersSegments = opts?.othersSegments ?? segments;
+	const bfScale = opts?.blackFillScale;
 
 	const segCount = Math.min(instances.length, dg.maxInstances);
 	const bfCount = blackFills
@@ -362,8 +365,11 @@ export function writeInstances(
 			const idx = segCount + i;
 			dg.posXY.setXY(idx, bf.x, bf.y);
 			dg.posZ.setX(idx, bf.z);
-			const BF_SCALE = 1.15;
-			dg.size.setXY(idx, bf.w * BF_SCALE, bf.h * BF_SCALE);
+			const scale =
+				bf.useOthersAtlas > 0.5
+					? (bfScale?.content ?? 1.15)
+					: (bfScale?.layout ?? 1.15);
+			dg.size.setXY(idx, bf.w * scale, bf.h * scale);
 
 			const seg =
 				bf.useOthersAtlas > 0.5 ? othersSegments[bf.segId] : segments[bf.segId];
@@ -507,6 +513,8 @@ export type FrameRenderData = {
 	dimFactor: number;
 	/** Global opacity for active instances (0..1, used for fade-out) */
 	activeOpacity?: number;
+	/** Black fill scale per category */
+	blackFillScale?: BlackFillScale;
 };
 
 type SegmentMeshRendererProps = {
@@ -638,6 +646,7 @@ export function SegmentMeshRenderer({
 				dimFactor: data.dimFactor,
 				opacityOverride: baseOpacityMap,
 				othersSegments: data.getSegmentsForLayer(data.currentLayer),
+				blackFillScale: data.blackFillScale,
 			});
 		}
 
@@ -667,6 +676,7 @@ export function SegmentMeshRenderer({
 					blackFills: layerBlackFills,
 					dimFactor: data.dimFactor,
 					othersSegments: data.getSegmentsForLayer(layerIdx),
+					blackFillScale: data.blackFillScale,
 				},
 			);
 			settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");
