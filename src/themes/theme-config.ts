@@ -57,7 +57,7 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		displayName: "梅",
 		layoutBasePath: "/ume",
 		contentBasePath: "/umebackground",
-		backgroundPath: "/ume/output-2a-2x-inv-refine.png",
+		backgroundPath: "/ume/output-2a-2x-inv-refine-vec.png",
 		available: true,
 		segmentLabels: {
 			layout: ["ume"],
@@ -69,7 +69,7 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		displayName: "藤",
 		layoutBasePath: "/fuji",
 		contentBasePath: "/fujibackground",
-		backgroundPath: "/fuji/output-2-2x-inv.png",
+		backgroundPath: "/fuji/output-2-2x-inv-vec.png",
 		available: true,
 		segmentLabels: {
 			layout: ["fuji", "eda"],
@@ -81,7 +81,7 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		displayName: "紅葉",
 		layoutBasePath: "/momiji",
 		contentBasePath: "/momijibackground",
-		backgroundPath: "/momiji/output-3-2x-inv.png",
+		backgroundPath: "/momiji/output-3-2x-inv-vec.png",
 		available: true,
 		segmentLabels: {
 			layout: ["momiji(white)", "momiji(black)"],

@@ -103,7 +103,7 @@ export const DEFAULT_TRANSITION_CONFIG: TransitionConfig = {
 		area: 0.15,
 	},
 	noiseSeed: 42,
-	bgFragmentCount: 480,
+	bgFragmentCount: 720,
 	directionSpread: 0.15,
 	staggerOutDuration: 0.8,
 	staggerInDuration: 0.8,
