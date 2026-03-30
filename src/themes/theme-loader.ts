@@ -8,7 +8,7 @@
 import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { loadAtlasTextures } from "../sakura/segment-manager";
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
-import type { ThemeConfig } from "./theme-config";
+import type { SegmentLabelFilter, ThemeConfig } from "./theme-config";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -39,6 +39,21 @@ async function loadManifest(basePath: string): Promise<SegmentManifest | null> {
 	} catch {
 		return null;
 	}
+}
+
+// ─── Segment Filtering ─────────────────────────────────────────────────────
+
+/**
+ * Filter segments by allowed labels.
+ * If allowedLabels is null, all segments pass through.
+ */
+function filterSegmentsByLabel(
+	segments: SegmentInfo[],
+	allowedLabels: string[] | null,
+): SegmentInfo[] {
+	if (!allowedLabels) return segments;
+	const labelSet = new Set(allowedLabels);
+	return segments.filter((s) => s.label != null && labelSet.has(s.label));
 }
 
 // ─── Segment Merging ────────────────────────────────────────────────────────
@@ -104,17 +119,26 @@ export async function loadThemeAssets(
 		: null;
 	if (signal?.aborted) return null;
 
-	const originalSegments = layoutManifest.segments;
+	// Filter segments by theme's label config
+	const filteredLayoutSegments = filterSegmentsByLabel(
+		layoutManifest.segments,
+		theme.segmentLabels.layout,
+	);
+	const originalSegments = filteredLayoutSegments;
 
 	// Merge content if available
 	let segments: SegmentInfo[];
 	if (contentManifest) {
-		segments = mergeSegmentsWithOthersContent(
-			layoutManifest.segments,
+		const filteredContentSegments = filterSegmentsByLabel(
 			contentManifest.segments,
+			theme.segmentLabels.content,
+		);
+		segments = mergeSegmentsWithOthersContent(
+			filteredLayoutSegments,
+			filteredContentSegments,
 		);
 	} else {
-		segments = layoutManifest.segments;
+		segments = filteredLayoutSegments;
 	}
 
 	// Load layout atlas (required)

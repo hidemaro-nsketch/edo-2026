@@ -259,8 +259,8 @@ export function TransitionRenderer({
 	]);
 
 	const showSegments =
-		transitionSystem.getPhase() !== "blackout" &&
-		transitionSystem.getPhase() !== "complete";
+		phase !== "blackout" &&
+		phase !== "complete";
 
 	return (
 		<>
