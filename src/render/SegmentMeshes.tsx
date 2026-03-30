@@ -1,512 +1,26 @@
 /**
- * SegmentMeshes.tsx — GPU Instanced Renderer
+ * SegmentMeshes.tsx — BuildSystem-aware wrapper for SegmentMeshRenderer
  *
- * Renders all segment quads using a single instanced draw call per mesh.
- * Three mesh layers are managed:
- *   1. Base mesh (layer 0): static original segment positions
- *   2. Active mesh: currently-animating layer (swipe transitions + black fills)
- *   3. Settled pool: one mesh per past layer (committed segments + their black fills)
- *
- * Each instance carries per-quad attributes (position, UV rect, opacity, wipe state)
- * written to GPU buffers every frame by writeInstances().
- *
- * The fragment shader handles three rendering modes:
- *   - Normal: atlas-textured segment with premultiplied alpha
- *   - Black fill: black silhouette using atlas alpha as mask
- *   - Swipe wipe: horizontal clip transition between old and new segment
+ * Bridges BuildSystem (animation state engine) with the generic
+ * SegmentMeshRenderer by extracting instances each frame and passing
+ * them as FrameRenderData.
  */
 
-import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
-import {
-	type Camera,
-	InstancedBufferAttribute,
-	InstancedBufferGeometry,
-	Mesh,
-	NormalBlending,
-	PlaneGeometry,
-	ShaderMaterial,
-	type Texture,
-	Vector3,
-} from "three";
+import { useFrame } from "@react-three/fiber";
+import { useCallback, useRef } from "react";
+import type { Texture } from "three";
 import type { BuildSystem } from "../layered-shuffle/build-system";
 import { buildBaseRenderInstances } from "../layered-shuffle/render-snapshot";
-import type {
-	BlackFillRenderInstance,
-	SegmentRenderInstance,
-} from "../layered-shuffle/types";
+import type { SegmentRenderInstance } from "../layered-shuffle/types";
 import type { DebugControls } from "../routes/index";
 import type { SegmentInfo } from "../sakura/types";
-
-// ─── Shaders ─────────────────────────────────────────────────────────────────
-
-const vertexShader = /* glsl */ `
-precision highp float;
-
-attribute vec2 aPosition;
-attribute float aPositionZ;
-attribute vec2 aSize;
-attribute vec4 aUvRect;
-attribute float aOpacity;
-attribute float aIsBlackFill;
-attribute float aWipeRole;
-attribute float aIsBboxOutline;
-attribute float aSwipeProgress;
-attribute float aUseOthersAtlas;
-attribute float aDimFactor;
-
-varying vec2 vUv;
-varying vec4 vUvRect;
-varying float vOpacity;
-varying float vIsBlackFill;
-varying float vWipeRole;
-varying float vIsBboxOutline;
-varying float vSwipeProgress;
-varying float vUseOthersAtlas;
-varying float vDimFactor;
-
-void main() {
-  vUv = uv;
-  vUvRect = aUvRect;
-  vOpacity = aOpacity;
-  vIsBlackFill = aIsBlackFill;
-  vWipeRole = aWipeRole;
-  vIsBboxOutline = aIsBboxOutline;
-  vSwipeProgress = aSwipeProgress;
-  vUseOthersAtlas = aUseOthersAtlas;
-  vDimFactor = aDimFactor;
-
-  vec3 scaled = position * vec3(aSize, 1.0);
-  vec3 worldPos = scaled + vec3(aPosition, aPositionZ);
-
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
-}
-`;
-
-const fragmentShader = /* glsl */ `
-precision highp float;
-
-varying vec2 vUv;
-varying vec4 vUvRect;
-varying float vOpacity;
-varying float vIsBlackFill;
-varying float vWipeRole;
-varying float vIsBboxOutline;
-varying float vSwipeProgress;
-varying float vUseOthersAtlas;
-varying float vDimFactor;
-
-uniform sampler2D uAtlas;
-uniform sampler2D uAtlasOthers;
-uniform float uTime;
-uniform float uNoiseFreq;
-uniform float uNoiseAmp;
-uniform float uNoiseSpeed;
-
-// ── Simplex 2D noise (Ashima Arts) ──────────────────────────────────────────
-vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
-
-float snoise(vec2 v) {
-  const vec4 C = vec4(0.211324865405187, 0.366025403784439,
-                     -0.577350269189626, 0.024390243902439);
-  vec2 i  = floor(v + dot(v, C.yy));
-  vec2 x0 = v - i + dot(i, C.xx);
-  vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-  vec4 x12 = x0.xyxy + C.xxzz;
-  x12.xy -= i1;
-  i = mod289(i);
-  vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
-  vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
-  m = m * m;
-  m = m * m;
-  vec3 x = 2.0 * fract(p * C.www) - 1.0;
-  vec3 h = abs(x) - 0.5;
-  vec3 ox = floor(x + 0.5);
-  vec3 a0 = x - ox;
-  m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
-  vec3 g;
-  g.x = a0.x * x0.x + h.x * x0.y;
-  g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-  return 130.0 * dot(m, g);
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
-void main() {
-  // Bbox outline mode: draw white wireframe border
-  if (vIsBboxOutline > 0.5) {
-    float borderW = 0.02;
-    float x = vUv.x;
-    float y = vUv.y;
-    bool onEdge = x < borderW || x > (1.0 - borderW) || y < borderW || y > (1.0 - borderW);
-    if (!onEdge) discard;
-    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
-    return;
-  }
-
-  // Swipe clipping with noisy edge
-  if (vWipeRole > 0.5) {
-    float x = vUv.x;
-    float p = vSwipeProgress;
-    // Add noise distortion to the clip boundary
-    float noise = snoise(vec2(vUv.y * uNoiseFreq, uTime * uNoiseSpeed));
-    float threshold = p + noise * uNoiseAmp;
-    if (vWipeRole < 1.5) {
-      // Old segment: keep right portion, discard left as wipe progresses
-      if (x < threshold) discard;
-    } else {
-      // New segment: keep left portion, discard right
-      if (x > threshold) discard;
-    }
-  }
-
-  if (vIsBlackFill > 0.5) {
-    vec2 flippedUv = vec2(vUv.x, 1.0 - vUv.y);
-    vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
-    float a = vUseOthersAtlas > 0.5
-      ? texture2D(uAtlasOthers, atlasUv).a
-      : texture2D(uAtlas, atlasUv).a;
-    // Sharpen edge alpha so the fill is solidly black (no translucent fringe)
-    float solidA = step(0.01, a);
-    gl_FragColor = vec4(0.0, 0.0, 0.0, solidA);
-    return;
-  }
-
-  vec2 flippedUv = vec2(vUv.x, 1.0 - vUv.y);
-  vec2 atlasUv = vUvRect.xy + flippedUv * vUvRect.zw;
-  vec4 color = vUseOthersAtlas > 0.5
-    ? texture2D(uAtlasOthers, atlasUv)
-    : texture2D(uAtlas, atlasUv);
-
-  float mask = step(0.01, color.a);
-  // 輝度ベースで黒/白を判定（smoothstepでアンチエイリアス）
-  float lum = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-  vec3 rgb = vec3(smoothstep(0.02, 0.25, lum));
-  // Apply dim factor for non-active slots during swipe
-  rgb *= vDimFactor;
-  gl_FragColor = vec4(rgb, mask * vOpacity);
-}
-`;
-
-// ─── Shared material ─────────────────────────────────────────────────────────
-
-function createMaterial(atlas: Texture, othersAtlas?: Texture): ShaderMaterial {
-	return new ShaderMaterial({
-		vertexShader,
-		fragmentShader,
-		uniforms: {
-			uAtlas: { value: atlas },
-			uAtlasOthers: { value: othersAtlas ?? atlas },
-			uTime: { value: 0 },
-			uNoiseFreq: { value: 15.0 },
-			uNoiseAmp: { value: 0.08 },
-			uNoiseSpeed: { value: 8.0 },
-		},
-		transparent: true,
-		depthWrite: false,
-		blending: NormalBlending,
-	});
-}
-
-// ─── Geometry helpers ────────────────────────────────────────────────────────
-// DynamicGeometry wraps an InstancedBufferGeometry with typed accessors
-// for each per-instance attribute. Instances are written each frame.
-
-type DynamicGeometry = {
-	geo: InstancedBufferGeometry;
-	posXY: InstancedBufferAttribute;
-	posZ: InstancedBufferAttribute;
-	size: InstancedBufferAttribute;
-	uvRect: InstancedBufferAttribute;
-	opacity: InstancedBufferAttribute;
-	isBlackFill: InstancedBufferAttribute;
-	wipeRole: InstancedBufferAttribute;
-	isBboxOutline: InstancedBufferAttribute;
-	swipeProgress: InstancedBufferAttribute;
-	useOthersAtlas: InstancedBufferAttribute;
-	dimFactor: InstancedBufferAttribute;
-	maxInstances: number;
-};
-
-function createDynamicGeometry(maxInstances: number): DynamicGeometry {
-	const base = new PlaneGeometry(1, 1);
-	const geo = new InstancedBufferGeometry();
-	geo.index = base.index;
-	geo.attributes.position = base.attributes.position;
-	geo.attributes.uv = base.attributes.uv;
-
-	const posXY = new InstancedBufferAttribute(
-		new Float32Array(maxInstances * 2),
-		2,
-	);
-	const posZ = new InstancedBufferAttribute(new Float32Array(maxInstances), 1);
-	const size = new InstancedBufferAttribute(
-		new Float32Array(maxInstances * 2),
-		2,
-	);
-	const uvRect = new InstancedBufferAttribute(
-		new Float32Array(maxInstances * 4),
-		4,
-	);
-	const opacity = new InstancedBufferAttribute(
-		new Float32Array(maxInstances),
-		1,
-	);
-	const isBlackFill = new InstancedBufferAttribute(
-		new Float32Array(maxInstances),
-		1,
-	);
-	const wipeRole = new InstancedBufferAttribute(
-		new Float32Array(maxInstances),
-		1,
-	);
-	const isBboxOutline = new InstancedBufferAttribute(
-		new Float32Array(maxInstances),
-		1,
-	);
-	const swipeProgress = new InstancedBufferAttribute(
-		new Float32Array(maxInstances),
-		1,
-	);
-	const useOthersAtlas = new InstancedBufferAttribute(
-		new Float32Array(maxInstances),
-		1,
-	);
-	const dimFactor = new InstancedBufferAttribute(
-		new Float32Array(maxInstances).fill(1.0),
-		1,
-	);
-
-	geo.setAttribute("aPosition", posXY);
-	geo.setAttribute("aPositionZ", posZ);
-	geo.setAttribute("aSize", size);
-	geo.setAttribute("aUvRect", uvRect);
-	geo.setAttribute("aOpacity", opacity);
-	geo.setAttribute("aIsBlackFill", isBlackFill);
-	geo.setAttribute("aWipeRole", wipeRole);
-	geo.setAttribute("aIsBboxOutline", isBboxOutline);
-	geo.setAttribute("aSwipeProgress", swipeProgress);
-	geo.setAttribute("aUseOthersAtlas", useOthersAtlas);
-	geo.setAttribute("aDimFactor", dimFactor);
-	geo.instanceCount = 0;
-
-	return {
-		geo,
-		posXY,
-		posZ,
-		size,
-		uvRect,
-		opacity,
-		isBlackFill,
-		wipeRole,
-		isBboxOutline,
-		swipeProgress,
-		useOthersAtlas,
-		dimFactor,
-		maxInstances,
-	};
-}
-
-/**
- * Write segment instances + optional black fills into a DynamicGeometry's GPU buffers.
- * Segments come first, then black fills are appended after them.
- * Must be called every frame since instance data changes with animation.
- */
-type WriteOptions = {
-	blackFills?: BlackFillRenderInstance[];
-	opacityOverride?: Map<number, number>;
-	dimFactor?: number;
-};
-
-function writeInstances(
-	dg: DynamicGeometry,
-	instances: SegmentRenderInstance[],
-	segments: SegmentInfo[],
-	opts?: WriteOptions,
-): void {
-	const blackFills = opts?.blackFills;
-	const opacityOverride = opts?.opacityOverride;
-	const dim = opts?.dimFactor ?? 1.0;
-
-	const segCount = Math.min(instances.length, dg.maxInstances);
-	const bfCount = blackFills
-		? Math.min(blackFills.length, dg.maxInstances - segCount)
-		: 0;
-	const totalCount = segCount + bfCount;
-	dg.geo.instanceCount = totalCount;
-
-	// Write segment instances
-	for (let i = 0; i < segCount; i++) {
-		const inst = instances[i];
-		const seg = segments[inst.segId];
-
-		dg.posXY.setXY(i, inst.x, inst.y);
-		dg.posZ.setX(i, inst.z);
-		dg.size.setXY(i, inst.w, inst.h);
-		const off = i * 4;
-		dg.uvRect.array[off] = seg.uvRect[0];
-		dg.uvRect.array[off + 1] = seg.uvRect[1];
-		dg.uvRect.array[off + 2] = seg.uvRect[2];
-		dg.uvRect.array[off + 3] = seg.uvRect[3];
-
-		const op = opacityOverride?.get(inst.segId) ?? 1;
-		dg.opacity.setX(i, op);
-		dg.isBlackFill.setX(i, 0);
-		dg.wipeRole.setX(i, inst.wipeRole);
-		dg.isBboxOutline.setX(i, inst.isBboxOutline);
-		dg.swipeProgress.setX(i, inst.swipeProgress);
-		dg.useOthersAtlas.setX(i, inst.useOthersAtlas);
-		dg.dimFactor.setX(i, dim);
-	}
-
-	// Write black fill instances after segment instances
-	if (blackFills) {
-		for (let i = 0; i < bfCount; i++) {
-			const bf = blackFills[i];
-			const idx = segCount + i;
-			dg.posXY.setXY(idx, bf.x, bf.y);
-			dg.posZ.setX(idx, bf.z);
-			const BF_SCALE = 1.15;
-			dg.size.setXY(idx, bf.w * BF_SCALE, bf.h * BF_SCALE);
-
-			// Use the segment's atlas UVs for shape masking
-			const seg = segments[bf.segId];
-			const off = idx * 4;
-			dg.uvRect.array[off] = seg.uvRect[0];
-			dg.uvRect.array[off + 1] = seg.uvRect[1];
-			dg.uvRect.array[off + 2] = seg.uvRect[2];
-			dg.uvRect.array[off + 3] = seg.uvRect[3];
-
-			dg.opacity.setX(idx, 1);
-			dg.isBlackFill.setX(idx, 1);
-			dg.wipeRole.setX(idx, 0);
-			dg.isBboxOutline.setX(idx, 0);
-			dg.swipeProgress.setX(idx, 0);
-			dg.useOthersAtlas.setX(idx, bf.useOthersAtlas);
-			dg.dimFactor.setX(idx, dim);
-		}
-	}
-
-	dg.posXY.needsUpdate = true;
-	dg.posZ.needsUpdate = true;
-	dg.size.needsUpdate = true;
-	dg.uvRect.needsUpdate = true;
-	dg.opacity.needsUpdate = true;
-	dg.isBlackFill.needsUpdate = true;
-	dg.wipeRole.needsUpdate = true;
-	dg.isBboxOutline.needsUpdate = true;
-	dg.swipeProgress.needsUpdate = true;
-	dg.useOthersAtlas.needsUpdate = true;
-	dg.dimFactor.needsUpdate = true;
-}
-
-/** Reusable sort buffer to avoid per-frame allocation */
-const sortBuffer: SegmentRenderInstance[] = [];
-
-/** Sort instances back-to-front relative to camera for correct alpha blending */
-function sortBackToFront(
-	instances: SegmentRenderInstance[],
-	camera: Camera,
-	viewDir: Vector3,
-): SegmentRenderInstance[] {
-	if (instances.length <= 1) return instances;
-
-	camera.getWorldDirection(viewDir);
-	const cx = camera.position.x;
-	const cy = camera.position.y;
-	const cz = camera.position.z;
-	const dx = viewDir.x;
-	const dy = viewDir.y;
-	const dz = viewDir.z;
-
-	// Reuse buffer to avoid GC pressure
-	sortBuffer.length = 0;
-	for (let i = 0; i < instances.length; i++) {
-		sortBuffer[i] = instances[i];
-	}
-	sortBuffer.length = instances.length;
-
-	sortBuffer.sort((a, b) => {
-		const depthA = (a.x - cx) * dx + (a.y - cy) * dy + (a.z - cz) * dz;
-		const depthB = (b.x - cx) * dx + (b.y - cy) * dy + (b.z - cz) * dz;
-		return depthB - depthA;
-	});
-	return sortBuffer;
-}
-
-// ─── Base mesh (static layer 0) ─────────────────────────────────────────────
-// The base layer shows all segments at their original positions in the source image.
-// This never changes during animation — it's the "ground truth" reference.
-
-function buildBaseGeometry(segments: SegmentInfo[]): {
-	dg: DynamicGeometry;
-	baseInstances: SegmentRenderInstance[];
-} {
-	const count = segments.length;
-	// Allocate extra space for black fills that may be placed on layer 0
-	const dg = createDynamicGeometry(count * 2);
-
-	const instances = buildBaseRenderInstances(segments);
-
-	writeInstances(dg, instances, segments);
-	return { dg, baseInstances: instances };
-}
-
-// ─── Render order constants ──────────────────────────────────────────────────
-// Each layer gets a render order band (stride=10) to ensure correct draw order.
-// Within a layer, active instances draw before settled to avoid z-fighting.
-
-const RENDER_ORDER_LAYER_STRIDE = 10;
-const RENDER_ORDER_ACTIVE_OFFSET = 1;
-const RENDER_ORDER_SETTLED_OFFSET = 2;
-
-function layerRenderOrder(layer: number, type: "active" | "settled"): number {
-	const offset =
-		type === "active"
-			? RENDER_ORDER_ACTIVE_OFFSET
-			: RENDER_ORDER_SETTLED_OFFSET;
-	return layer * RENDER_ORDER_LAYER_STRIDE + offset;
-}
-
-// ─── Per-layer mesh pool ─────────────────────────────────────────────────────
-// Pre-allocates one mesh per layer so settled segments + black fills can be
-// rendered independently per layer (needed for correct render ordering).
-
-type LayerMeshPool = {
-	geos: DynamicGeometry[];
-	meshes: Mesh[];
-};
-
-function createLayerMeshPool(
-	maxInstancesPerLayer: number,
-	material: ShaderMaterial,
-	layerCount: number,
-): LayerMeshPool {
-	const geos: DynamicGeometry[] = [];
-	const meshes: Mesh[] = [];
-
-	for (let i = 0; i < layerCount; i++) {
-		const dg = createDynamicGeometry(maxInstancesPerLayer);
-		const mesh = new Mesh(dg.geo, material);
-		mesh.frustumCulled = false;
-		mesh.renderOrder = layerRenderOrder(i + 1, "settled");
-		geos.push(dg);
-		meshes.push(mesh);
-	}
-
-	return { geos, meshes };
-}
+import {
+	type FrameRenderData,
+	SegmentMeshRenderer,
+	type SwipeEffectParams,
+} from "./SegmentMeshRenderer";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
-
-/** Swipe effect parameters (noise + dimming) exposed to Leva GUI */
-export type SwipeEffectParams = {
-	noiseFreq: number;
-	noiseAmp: number;
-	noiseSpeed: number;
-	dimFactor: number;
-};
 
 type SegmentMeshesProps = {
 	segments: SegmentInfo[];
@@ -522,6 +36,9 @@ type SegmentMeshesProps = {
 	swipeEffect?: SwipeEffectParams;
 };
 
+// Re-export SwipeEffectParams for backward compatibility
+export type { SwipeEffectParams } from "./SegmentMeshRenderer";
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function SegmentMeshes({
@@ -533,69 +50,38 @@ export function SegmentMeshes({
 	debugControls,
 	swipeEffect,
 }: SegmentMeshesProps) {
-	const { camera } = useThree();
-	const viewDirRef = useRef(new Vector3());
 	const currentDimRef = useRef(1.0);
 	const contentStartLayer = buildSystem.config.contentStartLayer;
-
 	const layerCount = buildSystem.config.maxGenerations;
 
-	// Each layer pool needs space for segments + potential black fills
-	const maxPerLayer = segments.length * 2;
+	// Pre-compute base instances (layer 0, static)
+	const baseInstancesRef = useRef<SegmentRenderInstance[]>(
+		buildBaseRenderInstances(originalSegments),
+	);
 
-	const { baseGeo, baseInstances, activeGeo, material, settledPool } =
-		useMemo(() => {
-			const { dg: bg, baseInstances: bi } = buildBaseGeometry(originalSegments);
-			const ag = createDynamicGeometry(segments.length);
-			const mat = createMaterial(atlasTexture, othersAtlasTexture ?? undefined);
-			const pool = createLayerMeshPool(maxPerLayer, mat, layerCount);
-			return {
-				baseGeo: bg,
-				baseInstances: bi,
-				activeGeo: ag,
-				material: mat,
-				settledPool: pool,
-			};
-		}, [
-			segments,
-			originalSegments,
-			atlasTexture,
-			othersAtlasTexture,
-			layerCount,
-			maxPerLayer,
-		]);
+	// Cache for render data to avoid per-frame allocation
+	const renderDataRef = useRef<FrameRenderData>({
+		activeInstances: [],
+		activeSegments: originalSegments,
+		baseInstances: baseInstancesRef.current,
+		baseSegments: originalSegments,
+		settledByLayer: new Map(),
+		activeBlackFills: [],
+		committedBlackFills: new Map(),
+		currentLayer: 1,
+		getSegmentsForLayer: () => originalSegments,
+		dimFactor: 1.0,
+	});
 
-	const baseMeshRef = useRef<Mesh>(new Mesh(baseGeo.geo, material));
-	const activeMeshRef = useRef<Mesh>(new Mesh(activeGeo.geo, material));
-
-	useEffect(() => {
-		baseMeshRef.current.geometry = baseGeo.geo;
-		baseMeshRef.current.material = material;
-		baseMeshRef.current.renderOrder = 0; // layer 0
-
-		activeMeshRef.current.geometry = activeGeo.geo;
-		activeMeshRef.current.material = material;
-		// active renderOrder is updated per-frame
-
-		return () => {
-			baseGeo.geo.dispose();
-			activeGeo.geo.dispose();
-			material.dispose();
-			for (const geo of settledPool.geos) geo.geo.dispose();
-		};
-	}, [baseGeo, activeGeo, material, settledPool]);
-
-	// ── Per-frame update: advance animation and write GPU buffers ──
+	// Update BuildSystem + debug controls each frame
 	useFrame((_, delta) => {
-		// デバッグコントロール: 一時停止・ステップ実行・速度倍率
 		const paused = debugControls?.pausedRef.current ?? false;
 		const step = debugControls?.stepRef.current ?? false;
 		const speed = debugControls?.speedRef.current ?? 1.0;
 
 		if (paused && !step) {
-			// 一時停止中（ステップ要求なし）: update をスキップするが描画は続行
+			// Paused: skip update but continue rendering
 		} else {
-			// ステップ実行時は 1/60 秒分だけ進める、通常時は delta × speed
 			const effectiveDelta = step ? 1 / 60 : delta * speed;
 			buildSystem.update(effectiveDelta);
 			if (step && debugControls) {
@@ -603,15 +89,7 @@ export function SegmentMeshes({
 			}
 		}
 
-		// Update shader uniforms: time + noise parameters
-		material.uniforms.uTime.value += delta;
-		if (swipeEffect) {
-			material.uniforms.uNoiseFreq.value = swipeEffect.noiseFreq;
-			material.uniforms.uNoiseAmp.value = swipeEffect.noiseAmp;
-			material.uniforms.uNoiseSpeed.value = swipeEffect.noiseSpeed;
-		}
-
-		// フェーズ情報を Leva Phase Monitor にリアルタイム反映
+		// Update debug label
 		if (debugControls) {
 			const label = buildSystem.getDebugLabel();
 			debugControls.debugLabelRef.current = label;
@@ -621,103 +99,64 @@ export function SegmentMeshes({
 			});
 		}
 
-		const currentLayer = buildSystem.getCurrentLayer();
-		activeMeshRef.current.renderOrder = layerRenderOrder(
-			currentLayer,
-			"active",
-		);
-
-		// Determine dim factor: during swipe/flash phases, non-active meshes are dimmed
+		// Compute dim factor (separate in/out durations, with hold)
 		const phase = buildSystem.state.phase;
-		const dimTarget = phase === "swipe" ? (swipeEffect?.dimFactor ?? 0.3) : 1.0;
-		const DIM_FADE_SPEED = 8.0; // ~125ms to reach target
-		currentDimRef.current += (dimTarget - currentDimRef.current) * Math.min(1, delta * DIM_FADE_SPEED);
-		const dimValue = currentDimRef.current;
-
-		// Gather all render data from BuildSystem
-		const settledByLayer = buildSystem.getSettledByLayer();
-		const activeBlackFills = buildSystem.getBlackFillInstances(); // current layer's swap → placed on the immediately previous layer
-		const committedBlackFills = buildSystem.getCommittedBlackFills(); // past layers' preserved fills
-
-		// Write active mesh: currently-animating segments (no black fills here — they go on prev layer)
-		const activeInstances = sortBackToFront(
-			buildSystem.getActiveInstances(),
-			camera,
-			viewDirRef.current,
-		);
-		writeInstances(
-			activeGeo,
-			activeInstances,
-			currentLayer >= contentStartLayer ? segments : originalSegments,
-		);
-
-		// Group active black fills by their sourceLayer (the layer that should be
-		// masked, which is now always the immediately previous layer)
-		const activeBfByLayer = new Map<number, BlackFillRenderInstance[]>();
-		for (const bf of activeBlackFills) {
-			let arr = activeBfByLayer.get(bf.sourceLayer);
-			if (!arr) {
-				arr = [];
-				activeBfByLayer.set(bf.sourceLayer, arr);
-			}
-			arr.push(bf);
-		}
-
-		// Re-write base mesh (layer 0) with any black fills targeting it
-		{
-			let layer0BlackFills = committedBlackFills.get(0);
-			const activeBf0 = activeBfByLayer.get(0);
-			if (activeBf0 && activeBf0.length > 0) {
-				layer0BlackFills = layer0BlackFills
-					? [...layer0BlackFills, ...activeBf0]
-					: activeBf0;
-			}
-			writeInstances(baseGeo, baseInstances, originalSegments, {
-				blackFills: layer0BlackFills,
-				dimFactor: dimValue,
-			});
-		}
-
-		// Write settled meshes: one per past layer, each with its own committed black fills.
-		// Active black fills are distributed to their respective sourceLayer meshes.
-		for (let i = 0; i < layerCount; i++) {
-			const layerIdx = i + 1;
-			const layerInstances = settledByLayer.get(layerIdx) ?? [];
-			const sorted = sortBackToFront(
-				layerInstances,
-				camera,
-				viewDirRef.current,
-			);
-
-			// Merge committed black fills with active black fills for this layer
-			let layerBlackFills = committedBlackFills.get(layerIdx);
-			const activeBfForLayer = activeBfByLayer.get(layerIdx);
-			if (activeBfForLayer && activeBfForLayer.length > 0) {
-				layerBlackFills = layerBlackFills
-					? [...layerBlackFills, ...activeBfForLayer]
-					: activeBfForLayer;
-			}
-
-			writeInstances(
-				settledPool.geos[i],
-				sorted,
-				layerIdx >= contentStartLayer ? segments : originalSegments,
-				{
-					blackFills: layerBlackFills,
-					dimFactor: dimValue,
-				},
-			);
-			settledPool.meshes[i].renderOrder = layerRenderOrder(layerIdx, "settled");
-		}
+		const stayDim = phase === "swipe" || phase === "dimming"
+			|| (phase === "hold" && buildSystem.state.phaseTime < buildSystem.config.dimHoldTime);
+		const dimTarget = stayDim ? (swipeEffect?.dimFactor ?? 0.3) : 1.0;
+		const isDimming = dimTarget < currentDimRef.current;
+		const dimDuration = isDimming
+			? buildSystem.config.dimFadeInDuration
+			: buildSystem.config.dimFadeOutDuration;
+		const dimSpeed = 4.6 / Math.max(0.01, dimDuration);
+		currentDimRef.current +=
+			(dimTarget - currentDimRef.current) *
+			Math.min(1, delta * dimSpeed);
 	});
 
+	const getSegmentsForLayer = useCallback(
+		(layer: number) =>
+			layer >= contentStartLayer ? segments : originalSegments,
+		[contentStartLayer, segments, originalSegments],
+	);
+
+	const getRenderData = useCallback((): FrameRenderData => {
+		const currentLayer = buildSystem.getCurrentLayer();
+		const data = renderDataRef.current;
+
+		data.activeInstances = buildSystem.getActiveInstances();
+		data.activeSegments =
+			currentLayer >= contentStartLayer ? segments : originalSegments;
+		data.baseInstances = baseInstancesRef.current;
+		data.baseSegments = originalSegments;
+		data.settledByLayer = buildSystem.getSettledByLayer();
+		data.activeBlackFills = buildSystem.getBlackFillInstances();
+		data.committedBlackFills = buildSystem.getCommittedBlackFills();
+		data.currentLayer = currentLayer;
+		data.getSegmentsForLayer = getSegmentsForLayer;
+		data.dimFactor = currentDimRef.current;
+
+		// Fade out during holding phase
+		const fadeProgress = buildSystem.getFadeOutProgress();
+		data.activeOpacity = fadeProgress > 0 ? 1 - fadeProgress : 1;
+
+		return data;
+	}, [
+		buildSystem,
+		segments,
+		originalSegments,
+		contentStartLayer,
+		getSegmentsForLayer,
+	]);
+
 	return (
-		<>
-			<primitive object={baseMeshRef.current} frustumCulled={false} />
-			<primitive object={activeMeshRef.current} frustumCulled={false} />
-			{settledPool.meshes.map((mesh) => (
-				<primitive key={mesh.uuid} object={mesh} />
-			))}
-		</>
+		<SegmentMeshRenderer
+			maxSegments={segments.length}
+			layerCount={layerCount}
+			atlasTexture={atlasTexture}
+			othersAtlasTexture={othersAtlasTexture ?? undefined}
+			getRenderData={getRenderData}
+			swipeEffect={swipeEffect}
+		/>
 	);
 }

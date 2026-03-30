@@ -34,6 +34,14 @@ export type ShuffleConfig = {
 	collapseStagger: number;
 	/** Pause duration after collapse before loop restart in seconds */
 	holdAfterComplete: number;
+	/** Duration in seconds for non-active slots to dim (darken) */
+	dimFadeInDuration: number;
+	/** Duration in seconds for non-active slots to brighten back */
+	dimFadeOutDuration: number;
+	/** Duration in seconds to hold dim state before brightening starts */
+	dimHoldTime: number;
+	/** Duration in seconds to dim before swipe starts (0 = dim and swipe start together) */
+	dimLeadTime: number;
 	/** Minimum layer at which each category begins swapping (e.g. { sakura: 1, leaf: 4 }) */
 	categoryStartLayer: Record<string, number>;
 	/** Minimum layer at which each sourceImageId begins participating in swaps.
@@ -138,6 +146,7 @@ export type CompiledPlan = {
 /** Phase of the build state machine */
 export type BuildPhase =
 	| "flash" // bbox wireframe flash before swipe
+	| "dimming" // pre-swipe dim (non-active slots fade before swipe starts)
 	| "swipe" // horizontal wipe transition for swapped slots
 	| "hold" // brief pause after swipe (commit happens inline at end)
 	| "complete" // all layers built
@@ -159,16 +168,20 @@ export type BuildState = {
 /** Default configuration values */
 export const DEFAULT_CONFIG: ShuffleConfig = {
 	maxGenerations: 10,
-	flashCount: 2,
+	flashCount: 0,
 	flashOnDuration: 0.08,
 	flashOffDuration: 0.06,
-	swipeDuration: 2.5,
-	swipeDurationJitter: 0.1,
-	holdDuration: 2.5,
+	swipeDuration: 3.0,
+	swipeDurationJitter: 0.0,
+	holdDuration: 5.0,
 	layerSpacing: 1.5,
 	collapseDuration: 0.4,
 	collapseStagger: 0.2,
-	holdAfterComplete: 2.0,
+	holdAfterComplete: 4.0,
+	dimFadeInDuration: 3.5,
+	dimFadeOutDuration: 4.5,
+	dimHoldTime: 1.7,
+	dimLeadTime: 1.7,
 	categoryStartLayer: { sakura: 1, leaf: 4, flower: 7 },
 	sourceImageStartLayer: {
 		"花陽ひいなかた-2_s03_str0.600_seed45": 4,

@@ -99,7 +99,7 @@ function generateSwapPairs(
 	sourceImageStartLayer: Record<string, number>,
 	random: () => number = Math.random,
 ): SwapPair[] {
-	const SWAPS_PER_CATEGORY = 1;
+	const SWAPS_PER_CATEGORY = 2;
 	const categoryGroups = groupByCategory(segments);
 
 	const used = new Set<number>();
