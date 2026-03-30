@@ -12,10 +12,10 @@ import { compilePlan } from "../layered-shuffle/compiled-plan";
 import {
 	buildBlackFillRenderInstancesForLayer,
 	buildSettledRenderInstancesForLayer,
-	getAtlasSelectionForLayer,
+	shouldUseOthersAtlas,
 } from "../layered-shuffle/render-snapshot";
 import type { CompiledPlan } from "../layered-shuffle/types";
-import { DEFAULT_CONFIG } from "../layered-shuffle/types";
+import { DEFAULT_CONFIG, getEffectiveMaxLayer } from "../layered-shuffle/types";
 import { computeContainedSize, KIMONO_SIZE } from "../sakura/constants";
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
 
@@ -198,13 +198,12 @@ function drawLayer(
 
 	// ── 3. For each layer 1..N: black fills then settled segments ──
 	for (let l = 1; l <= layer; l++) {
-		const useOthers = getAtlasSelectionForLayer(l, DEFAULT_CONFIG) > 0;
-
 		// 3a. Black fills — vacated slots, cover the old segment underneath
 		const blackFills = buildBlackFillRenderInstancesForLayer(
 			plan,
 			DEFAULT_CONFIG,
 			l,
+			originalSegments,
 		);
 		for (const fill of blackFills) {
 			const [bfX, bfY] = worldToCanvas(fill.x, fill.y);
@@ -233,6 +232,7 @@ function drawLayer(
 		for (const instance of settled) {
 			const slot = plan.mappingByLayer[l].indexOf(instance.segId);
 			if (slot < 0) continue;
+			const useOthers = shouldUseOthersAtlas(instance.segId, l, originalSegments, DEFAULT_CONFIG) > 0;
 			drawSegmentAtSlot(
 				ctx,
 				instance.segId,
@@ -275,7 +275,7 @@ function drawLayer(
 
 			// Contained size boundary (magenta)
 			const segId = currentMapping[slot];
-			const useOthers = layer >= contentStartLayer;
+			const useOthers = shouldUseOthersAtlas(segId, layer, originalSegments, DEFAULT_CONFIG) > 0;
 			const seg = useOthers ? mergedSegments[segId] : originalSegments[segId];
 			const contentW = useOthers ? seg.trimmedSize[0] : seg.bboxInSource[2];
 			const contentH = useOthers ? seg.trimmedSize[1] : seg.bboxInSource[3];
@@ -286,8 +286,11 @@ function drawLayer(
 		}
 	}
 
-	// Layer label
-	const useOthers = layer >= contentStartLayer;
+	// Layer label — show "others" if any category uses others at this layer
+	const useOthers = layer >= contentStartLayer ||
+		Object.values(DEFAULT_CONFIG.categoryContentStartLayer).some(
+			(start) => layer >= start,
+		);
 	ctx.fillStyle = "white";
 	ctx.font = "bold 14px monospace";
 	ctx.fillText(`Layer ${layer}${useOthers ? " (others)" : " (sakura)"}`, 8, 20);
@@ -368,8 +371,9 @@ function DebugLayersPage() {
 			const DEBUG_SEED = 42;
 			const plan = compilePlan(mergedSegments, config, DEBUG_SEED);
 
+			const effectiveMax = getEffectiveMaxLayer(config);
 			setStatus(
-				`${originalSegments.length} segments, ${config.maxGenerations + 1} layers (0-${config.maxGenerations}), contentStartLayer=${config.contentStartLayer}`,
+				`${originalSegments.length} segments, ${effectiveMax + 1} layers (0-${effectiveMax}), contentStartLayer=${config.contentStartLayer}`,
 			);
 
 			// Render canvases in 2-column × 5-row grid
@@ -377,7 +381,7 @@ function DebugLayersPage() {
 			if (!container) return;
 			container.innerHTML = "";
 
-			for (let layer = 0; layer <= config.maxGenerations; layer++) {
+			for (let layer = 0; layer <= effectiveMax; layer++) {
 				const wrapper = document.createElement("div");
 				wrapper.style.margin = "4px";
 

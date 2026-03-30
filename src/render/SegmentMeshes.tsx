@@ -12,6 +12,7 @@ import type { Texture } from "three";
 import type { BuildSystem } from "../layered-shuffle/build-system";
 import { buildBaseRenderInstances } from "../layered-shuffle/render-snapshot";
 import type { SegmentRenderInstance } from "../layered-shuffle/types";
+import { getEffectiveMaxLayer } from "../layered-shuffle/types";
 import type { DebugControls } from "../routes/index";
 import type { SegmentInfo } from "../sakura/types";
 import {
@@ -52,7 +53,7 @@ export function SegmentMeshes({
 }: SegmentMeshesProps) {
 	const currentDimRef = useRef(1.0);
 	const contentStartLayer = buildSystem.config.contentStartLayer;
-	const layerCount = buildSystem.config.maxGenerations;
+	const layerCount = getEffectiveMaxLayer(buildSystem.config);
 
 	// Pre-compute base instances (layer 0, static)
 	const baseInstancesRef = useRef<SegmentRenderInstance[]>(

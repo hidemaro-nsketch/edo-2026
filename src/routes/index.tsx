@@ -24,7 +24,7 @@ import type * as THREE from "three";
 import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { BuildSystem } from "../layered-shuffle/build-system"; // シャッフルアニメーションの状態管理エンジン
 import { compilePlan } from "../layered-shuffle/compiled-plan"; // セグメント＋設定 → 実行プランへ変換
-import { DEFAULT_CONFIG, type ShuffleConfig } from "../layered-shuffle/types";
+import { DEFAULT_CONFIG, getEffectiveMaxLayer, type ShuffleConfig } from "../layered-shuffle/types";
 import { CameraRig, Y_CENTER_OFFSET } from "../render/CameraRig"; // レイヤー追従カメラ
 import { ConnectionLines } from "../render/ConnectionLines"; // セグメント間の接続線描画
 import { SegmentMeshes, type SwipeEffectParams } from "../render/SegmentMeshes"; // 各セグメントの矩形メッシュ描画
@@ -463,6 +463,8 @@ function useDebugGui(): DebugGuiResult {
 		categoryStartLayer: DEFAULT_CONFIG.categoryStartLayer,
 		sourceImageStartLayer: DEFAULT_CONFIG.sourceImageStartLayer,
 		contentStartLayer: layers.contentStartLayer,
+		categoryMaxLayer: DEFAULT_CONFIG.categoryMaxLayer,
+		categoryContentStartLayer: DEFAULT_CONFIG.categoryContentStartLayer,
 		resetTrigger,
 		debugControls,
 		swipeEffect: swipeEffectGui,
@@ -629,7 +631,10 @@ function ShuffleContent({
 			s.currentLayer = currentLayer;
 			s.phaseTime = system.state.phaseTime;
 
-			s.usingOthers = currentLayer >= config.contentStartLayer;
+			s.usingOthers = currentLayer >= config.contentStartLayer ||
+				Object.values(config.categoryContentStartLayer).some(
+					(start) => currentLayer >= start,
+				);
 
 			const plan = system.plan;
 			if (currentLayer >= 1 && currentLayer < plan.legsByLayer.length) {
@@ -721,9 +726,10 @@ function CameraAndLifecycle({
 
 		// 現在レイヤーを ref 経由で CameraRig に伝達（setState を避けてパフォーマンス維持）
 		// Collapse disabled: カメラは常に top-down を維持（oblique 遷移しない）
+		const effectiveMaxLayer = getEffectiveMaxLayer(config);
 		currentLayerRef.current = Math.min(
 			buildSystem.state.currentLayer,
-			config.maxGenerations - 1,
+			effectiveMaxLayer - 1,
 		);
 	});
 
@@ -731,7 +737,7 @@ function CameraAndLifecycle({
 		<CameraRig
 			currentGen={1}
 			currentGenRef={currentLayerRef}
-			maxGenerations={config.maxGenerations}
+			maxGenerations={getEffectiveMaxLayer(config)}
 			layerSpacing={config.layerSpacing}
 		/>
 	);
@@ -937,6 +943,10 @@ function Scene({
 			sourceImageStartLayer: DEFAULT_CONFIG.sourceImageStartLayer,
 			contentStartLayer:
 				gui.contentStartLayer ?? DEFAULT_CONFIG.contentStartLayer,
+			categoryMaxLayer: gui.categoryMaxLayer ?? DEFAULT_CONFIG.categoryMaxLayer,
+			categoryContentStartLayer:
+				gui.categoryContentStartLayer ??
+				DEFAULT_CONFIG.categoryContentStartLayer,
 		}),
 		[
 			gui.maxGenerations,
@@ -951,11 +961,13 @@ function Scene({
 			gui.collapseStagger,
 			gui.holdAfterComplete,
 			gui.contentStartLayer,
+			gui.categoryMaxLayer,
+			gui.categoryContentStartLayer,
 		],
 	);
 
 	// Keep maxLayers in sync with GUI
-	statusRef.current.maxLayers = config.maxGenerations;
+	statusRef.current.maxLayers = getEffectiveMaxLayer(config);
 
 	// Background dim factor: updated per-frame by ShuffleContent
 	const bgDimRef = useRef(1.0);
