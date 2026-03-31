@@ -51,6 +51,7 @@ export type ThemeConfig = {
  */
 export const THEME_SEQUENCE: ThemeConfig[] = [
 	
+
 	{
 		id: "sakura",
 		displayName: "桜",
@@ -100,7 +101,7 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 		},
 	},
 
-	{
+{
 		id: "fuji",
 		displayName: "藤",
 		layoutBasePath: "/fuji",
@@ -116,7 +117,9 @@ export const THEME_SEQUENCE: ThemeConfig[] = [
 			content: 1.3,
 		},
 	},
-	];
+
+
+		];
 
 /** Get only the available themes for runtime rotation */
 export function getAvailableThemes(): ThemeConfig[] {

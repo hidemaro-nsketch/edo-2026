@@ -126,14 +126,15 @@ function SakuraShuffleContent({
 	const nextPlanSeedRef = useRef(PLAN_SEED);
 
 	const createNextPlan = () => {
+		const themeCategoryName = getThemeCategoryName("sakura");
 		const plan = compilePlan(
 			segments,
 			config,
 			nextPlanSeedRef.current,
 			originalSegments,
+			themeCategoryName,
 		);
 		nextPlanSeedRef.current += 1;
-		const themeCategoryName = getThemeCategoryName("sakura");
 		const themeMaxLayer = themeCategoryName
 			? config.categoryMaxLayer[themeCategoryName]
 			: undefined;

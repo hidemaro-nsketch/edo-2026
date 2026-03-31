@@ -221,7 +221,7 @@ export function getCategoryChangeSlotCount(
 	config: ShuffleConfig,
 	categoryKey: string,
 ): number {
-	return normalizeLayerCount(config.categoryChangeSlotCount[categoryKey], 2);
+	return normalizeLayerCount(config.categoryChangeSlotCount[categoryKey], 1);
 }
 
 export function getCategoryTotalLayerCount(
@@ -277,8 +277,8 @@ const DEFAULT_CATEGORY_OTHERS_LAYERS = {
 };
 
 const DEFAULT_CATEGORY_CHANGE_SLOT_COUNT = {
-	[THEME_CATEGORY_NAMES.sakura]: 4,
-	[THEME_CATEGORY_NAMES.ume]: 2,
+	[THEME_CATEGORY_NAMES.sakura]: 12,
+	[THEME_CATEGORY_NAMES.ume]: 12,
 	[THEME_CATEGORY_NAMES.fuji]: 1,
 	[THEME_CATEGORY_NAMES.momiji]: 4,
 };

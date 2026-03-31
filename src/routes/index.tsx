@@ -517,14 +517,15 @@ function ShuffleContent({
 	const nextPlanSeedRef = useRef(INITIAL_PLAN_SEED);
 
 	const createNextPlan = () => {
+		const themeCategoryName = getThemeCategoryName(themeId);
 		const plan = compilePlan(
 			segments,
 			config,
 			nextPlanSeedRef.current,
 			originalSegments,
+			themeCategoryName,
 		);
 		nextPlanSeedRef.current += 1;
-		const themeCategoryName = getThemeCategoryName(themeId);
 		const themeMaxLayer = themeCategoryName
 			? config.categoryMaxLayer[themeCategoryName]
 			: undefined;
