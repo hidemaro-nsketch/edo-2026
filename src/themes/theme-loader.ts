@@ -8,7 +8,7 @@
 import { SRGBColorSpace, type Texture, TextureLoader } from "three";
 import { loadAtlasTextures } from "../sakura/segment-manager";
 import type { SegmentInfo, SegmentManifest } from "../sakura/types";
-import type { SegmentLabelFilter, ThemeConfig } from "./theme-config";
+import type { ThemeConfig } from "./theme-config";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

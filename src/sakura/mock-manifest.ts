@@ -25,6 +25,7 @@ export const MOCK_MANIFEST: SegmentManifest = {
 		{
 			id: 0,
 			sourceImageId: "sakura_a",
+			categoryName: "flower",
 			categoryId: 0,
 			categoryMask: 1,
 			atlasPage: 0,
@@ -38,6 +39,7 @@ export const MOCK_MANIFEST: SegmentManifest = {
 		{
 			id: 1,
 			sourceImageId: "sakura_a",
+			categoryName: "leaf",
 			categoryId: 1,
 			categoryMask: 2,
 			atlasPage: 0,
@@ -51,6 +53,7 @@ export const MOCK_MANIFEST: SegmentManifest = {
 		{
 			id: 2,
 			sourceImageId: "sakura_a",
+			categoryName: "trunk",
 			categoryId: 2,
 			categoryMask: 4,
 			atlasPage: 0,
@@ -65,6 +68,7 @@ export const MOCK_MANIFEST: SegmentManifest = {
 		{
 			id: 3,
 			sourceImageId: "sakura_b",
+			categoryName: "flower",
 			categoryId: 0,
 			categoryMask: 1,
 			atlasPage: 0,
@@ -78,6 +82,7 @@ export const MOCK_MANIFEST: SegmentManifest = {
 		{
 			id: 4,
 			sourceImageId: "sakura_b",
+			categoryName: "leaf",
 			categoryId: 1,
 			categoryMask: 2,
 			atlasPage: 0,
@@ -91,6 +96,7 @@ export const MOCK_MANIFEST: SegmentManifest = {
 		{
 			id: 5,
 			sourceImageId: "sakura_b",
+			categoryName: "trunk",
 			categoryId: 2,
 			categoryMask: 4,
 			atlasPage: 0,
@@ -105,6 +111,7 @@ export const MOCK_MANIFEST: SegmentManifest = {
 		{
 			id: 6,
 			sourceImageId: "sakura_c",
+			categoryName: "flower",
 			categoryId: 0,
 			categoryMask: 1,
 			atlasPage: 0,
@@ -118,6 +125,7 @@ export const MOCK_MANIFEST: SegmentManifest = {
 		{
 			id: 7,
 			sourceImageId: "sakura_c",
+			categoryName: "leaf",
 			categoryId: 1,
 			categoryMask: 2,
 			atlasPage: 0,
@@ -131,6 +139,7 @@ export const MOCK_MANIFEST: SegmentManifest = {
 		{
 			id: 8,
 			sourceImageId: "sakura_c",
+			categoryName: "trunk",
 			categoryId: 2,
 			categoryMask: 4,
 			atlasPage: 0,

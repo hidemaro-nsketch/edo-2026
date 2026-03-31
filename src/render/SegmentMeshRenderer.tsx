@@ -549,7 +549,7 @@ export function SegmentMeshRenderer({
 
 	const { baseGeo, activeGeo, material, settledPool } = useMemo(() => {
 		const bg = createDynamicGeometry(maxSegments * 2);
-		const ag = createDynamicGeometry(maxSegments);
+		const ag = createDynamicGeometry(maxSegments * 2);
 		const mat = createSegmentMaterial(atlasTexture, othersAtlasTexture);
 		const pool = createLayerMeshPool(maxPerLayer, mat, layerCount);
 		return {
