@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DisplaySpecRouteImport } from './routes/display-spec'
 import { Route as DebugLayersRouteImport } from './routes/debug-layers'
 import { Route as DebugRouteImport } from './routes/debug'
 import { Route as IndexRouteImport } from './routes/index'
@@ -20,6 +21,11 @@ import { Route as DemoStartSsrSpaModeRouteImport } from './routes/demo/start.ssr
 import { Route as DemoStartSsrFullSsrRouteImport } from './routes/demo/start.ssr.full-ssr'
 import { Route as DemoStartSsrDataOnlyRouteImport } from './routes/demo/start.ssr.data-only'
 
+const DisplaySpecRoute = DisplaySpecRouteImport.update({
+  id: '/display-spec',
+  path: '/display-spec',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DebugLayersRoute = DebugLayersRouteImport.update({
   id: '/debug-layers',
   path: '/debug-layers',
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/debug': typeof DebugRoute
   '/debug-layers': typeof DebugLayersRoute
+  '/display-spec': typeof DisplaySpecRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/debug': typeof DebugRoute
   '/debug-layers': typeof DebugLayersRoute
+  '/display-spec': typeof DisplaySpecRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/debug': typeof DebugRoute
   '/debug-layers': typeof DebugLayersRoute
+  '/display-spec': typeof DisplaySpecRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/debug'
     | '/debug-layers'
+    | '/display-spec'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/'
     | '/debug'
     | '/debug-layers'
+    | '/display-spec'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/debug'
     | '/debug-layers'
+    | '/display-spec'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DebugRoute: typeof DebugRoute
   DebugLayersRoute: typeof DebugLayersRoute
+  DisplaySpecRoute: typeof DisplaySpecRoute
   DemoApiNamesRoute: typeof DemoApiNamesRoute
   DemoStartApiRequestRoute: typeof DemoStartApiRequestRoute
   DemoStartServerFuncsRoute: typeof DemoStartServerFuncsRoute
@@ -162,6 +175,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/display-spec': {
+      id: '/display-spec'
+      path: '/display-spec'
+      fullPath: '/display-spec'
+      preLoaderRoute: typeof DisplaySpecRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/debug-layers': {
       id: '/debug-layers'
       path: '/debug-layers'
@@ -239,6 +259,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DebugRoute: DebugRoute,
   DebugLayersRoute: DebugLayersRoute,
+  DisplaySpecRoute: DisplaySpecRoute,
   DemoApiNamesRoute: DemoApiNamesRoute,
   DemoStartApiRequestRoute: DemoStartApiRequestRoute,
   DemoStartServerFuncsRoute: DemoStartServerFuncsRoute,
